@@ -224,6 +224,46 @@ function fieldPlacementSummary(event: PlayerEventAnalysis) {
   }
 }
 
+type FieldClassSummary = {
+  className: string
+  averageTopPercent: number
+  resultCount: number
+  playerCount: number
+}
+
+function averagePlacement(event: PlayerEventAnalysis) {
+  if (event.standing === null || !event.fieldSize) return null
+  const rangeEnd = event.standingRangeTo ?? event.standing
+  const placement = (event.standing + rangeEnd) / 2
+  return Math.min(1, Math.max(0, placement / event.fieldSize))
+}
+
+function summarizeFieldPlacements(analyses: Record<number, PlayerAnalysis | null>) {
+  const groups = new Map<string, { percentages: number[]; players: Set<number> }>()
+
+  Object.values(analyses).forEach((analysis) => {
+    if (!analysis) return
+
+    fieldPlacementEvents(analysis).forEach((event) => {
+      const percentage = averagePlacement(event)
+      if (percentage === null) return
+
+      const className = compactClassName(event.className)
+      const group = groups.get(className) ?? { percentages: [], players: new Set<number>() }
+      group.percentages.push(percentage)
+      group.players.add(analysis.playerId)
+      groups.set(className, group)
+    })
+  })
+
+  return Array.from(groups, ([className, group]): FieldClassSummary => ({
+    className,
+    averageTopPercent: group.percentages.reduce((sum, value) => sum + value, 0) / group.percentages.length,
+    resultCount: group.percentages.length,
+    playerCount: group.players.size,
+  })).sort((first, second) => first.averageTopPercent - second.averageTopPercent)
+}
+
 function matchRecord(matches: PlayerEventAnalysis['matches']) {
   const wins = matches.filter((match) => match.won === true).length
   const losses = matches.filter((match) => match.won === false).length
@@ -445,6 +485,10 @@ function App() {
   const ratingSpread = ratings.length > 1 ? Math.max(...ratings) - Math.min(...ratings) : null
   const selectedPair = snapshot.participants.find((pair) => pair.id === selectedPairId)
   const classTitle = snapshot.selectedClass.name.replace(/\s*\([^)]*\)/, '')
+  const fieldClassSummaries = useMemo(
+    () => summarizeFieldPlacements(fieldPlacementSummaries),
+    [fieldPlacementSummaries],
+  )
 
   async function analyzeTournament() {
     fieldPlacementRequestRef.current += 1
@@ -747,6 +791,38 @@ function App() {
               </div>
             </div>
 
+            {fieldPlacementsLoaded && (
+              <section className="field-aggregate" aria-label="Average recent placement by class">
+                <div className="field-aggregate-heading">
+                  <div>
+                    <div className="section-kicker">RECENT FORM BY CLASS</div>
+                    <p>Average of the latest five finished tournaments for each player.</p>
+                  </div>
+                  <span>lower is better</span>
+                </div>
+                {fieldClassSummaries.length ? (
+                  <div className="field-aggregate-grid">
+                    {fieldClassSummaries.map((summary) => {
+                      const percentage = Math.round(summary.averageTopPercent * 100)
+                      return (
+                        <article className="field-aggregate-card" key={summary.className}>
+                          <span className="field-aggregate-class">{summary.className}</span>
+                          <strong>Top {percentage}%</strong>
+                          <span>{summary.resultCount} results · {summary.playerCount} players</span>
+                          <div className="field-aggregate-scale" aria-hidden="true">
+                            <span className="field-aggregate-marker" style={{ left: `${percentage}%` }} />
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="field-aggregate-empty">No comparable finished placements were found yet.</p>
+                )}
+                <p className="field-aggregate-note"><Info size={13} /> Top percentage is placement divided by the finished field size; a lower percentage means a stronger average finish.</p>
+              </section>
+            )}
+
             <div className="table-toolbar">
               <div className="table-search"><Search size={16} /><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Filter players" aria-label="Filter players" /></div>
               <span className="table-count">{visibleParticipants.length} of {snapshot.participants.length} pairs</span>
@@ -791,7 +867,7 @@ function App() {
                                           <span className="field-placement-date">{placement.date}</span>
                                           <span className="field-placement-class">{placement.className}</span>
                                           <strong className="field-placement-result">{placement.position}</strong>
-                                          {placement.fieldSize && <span className="field-placement-field">of <strong>{placement.fieldSize}</strong> pairs</span>}
+                                          {placement.fieldSize && <span className="field-placement-field">of <span className="field-placement-field-count">{placement.fieldSize}</span> pairs</span>}
                                         </div>
                                       )
                                     })}
