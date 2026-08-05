@@ -10,7 +10,8 @@ Rankedin API
      ▼
 src/lib/rankedin.ts  ── normalized domain types ──>  React view state
                                                         │
-                                                        ├─ temporary tournament/player analysis
+                                                        ├─ temporary tournament exploration
+                                                        ├─ temporary player progress analysis
                                                         └─ small local display preferences
 ```
 
@@ -23,12 +24,24 @@ src/lib/rankedin.ts  ── normalized domain types ──>  React view state
 
 ## Analysis flow
 
+### Tournament Explorer
+
 1. Parse a public tournament URL or ID.
 2. Load the tournament header and standings metadata.
 3. Load participants for the selected class.
-4. When a player is selected, page through their participated events and keep finished events.
+4. When a pair is selected, page through each player's participated events and keep finished events.
 5. For each event, locate the player's result by numeric participant ID across classes.
 6. Load matches for the matching class and normalize partners, opponents, scores and outcomes.
-7. Render incomplete records honestly rather than treating missing data as zero.
+
+### Player Progress
+
+1. Parse a public player profile URL or `R...` ID.
+2. Resolve the public ID to the API's numeric player ID and profile metadata.
+3. Load a bounded full-history window of participated events and keep finished tournament events.
+4. Locate each player's result by numeric participant ID across event classes.
+5. Normalize organizer-entered class labels for chart series while retaining raw labels in the result table.
+6. Derive placement percentage from standing and field size, using the midpoint for ranged standings.
+
+Both modes render incomplete records honestly rather than treating missing data as zero.
 
 The API currently permits cross-origin browser requests from a GitHub Pages-style origin. This is an external deployment fact, not an application guarantee; if Rankedin changes its CORS policy, the project will need an explicitly approved proxy or server-backed architecture.

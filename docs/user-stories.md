@@ -58,7 +58,7 @@ These stories define the current product direction. The MVP is intentionally foc
 
 ## Single-player progress view — discovery
 
-These stories describe the proposed next feature. They are intentionally separate from the current MVP until the data density and visual treatment are validated.
+These stories describe the Player Progress mode. The initial view supports the profile lookup, timeline, series summaries, source links and honest missing-data treatment; filtering and deeper comparisons remain follow-up scope.
 
 P1. As a player, I want to paste my Rankedin profile URL or ID so that I can start from my own history.
 P2. As a player, I want to see my finished tournament placements on a time-based view so that I can understand change over time.

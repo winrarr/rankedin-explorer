@@ -9,6 +9,12 @@ export type PlayerRecord = {
   rating: number | null
 }
 
+export type PlayerProfile = PlayerRecord & {
+  countryCode: string | null
+  homeClubName: string | null
+  homeClubUrl: string | null
+}
+
 export type PairRecord = {
   id: string
   first: PlayerRecord
@@ -106,6 +112,20 @@ type RawHeader = {
   EndDate: string
   EventState: number
   IsPremium: boolean
+}
+
+type RawPlayerProfileResponse = {
+  Header: {
+    PlayerId: number
+    FirstName: string
+    LastName: string
+    CountryShort: string | null
+    RankedinId: string
+    HomeClubName: string | null
+    HomeClubUrl: string | null
+  }
+  FullName: string
+  NameForRouting: string
 }
 
 type RawStandingResponse = {
@@ -289,6 +309,35 @@ export function parseTournamentReference(value: string) {
   if (!match) throw new Error('Paste a Rankedin tournament URL or numeric tournament ID.')
 
   return { tournamentId: Number(match[1]) }
+}
+
+export function parsePlayerReference(value: string) {
+  const trimmed = value.trim()
+  const directId = /^R\d+$/i.test(trimmed) ? trimmed : null
+  const match = trimmed.match(/\/player\/(R\d+)/i) ?? trimmed.match(/\b(R\d+)\b/i)
+  const rankedInId = (directId ?? match?.[1])?.toUpperCase()
+  if (!rankedInId) throw new Error('Paste a Rankedin player profile URL or R-number.')
+
+  return { rankedInId }
+}
+
+export async function getPlayerProfile(reference: string): Promise<PlayerProfile> {
+  const { rankedInId } = parsePlayerReference(reference)
+  const response = await request<RawPlayerProfileResponse>(
+    `/player/PlayerProfileInfoAsync${query({ rankedinId: rankedInId, language: 'en' })}`,
+  )
+  const header = response.Header
+
+  return {
+    id: header.PlayerId,
+    rankedInId: header.RankedinId,
+    name: response.FullName || `${header.FirstName} ${header.LastName}`.trim(),
+    url: `/en/player/${header.RankedinId}/${response.NameForRouting}/info`,
+    rating: null,
+    countryCode: header.CountryShort,
+    homeClubName: header.HomeClubName,
+    homeClubUrl: header.HomeClubUrl,
+  }
 }
 
 export async function getClassParticipants(tournamentId: number, classId: number) {

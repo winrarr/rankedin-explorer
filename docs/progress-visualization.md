@@ -1,6 +1,6 @@
 # Single-player progress view
 
-Status: discovery; not implemented.
+Status: implemented as the initial Player Progress mode.
 
 The proposed feature starts from one public Rankedin player profile and visualizes finished tournament placements over time. It should remain a temporary, read-only browser view with no saved player history.
 
@@ -28,9 +28,9 @@ Yes, with a careful visual treatment. Rasmus has enough results for two useful s
 - Moving from DPF25 to DPF35 changes the difficulty context, so a single undifferentiated line would be misleading.
 - A lower percentage is better, but `1st of 8` is Top 12.5%, not zero; the axis and legend need to explain this clearly.
 
-## Recommended first design
+## Implemented design
 
-Use a single-player timeline scatter plot with optional connecting segments:
+The current view uses a single-player timeline scatter plot with optional connecting segments:
 
 1. The x-axis is event date.
 2. The y-axis is finish percentage (`placement / field size`), with Top 0% at the top and Top 100% at the bottom. Label it as “finish percentage — lower is better”.
@@ -40,6 +40,7 @@ Use a single-player timeline scatter plot with optional connecting segments:
 6. Summary cards show count, average, median, best, latest and the recent direction for each selected series.
 7. Filters allow all classes, one class, a date range and a recent-result limit. The raw event list remains available below the chart for verification.
 8. Missing results appear in a separate notice or event list so the chart never turns unavailable data into a bad finish.
+9. The chart legend toggles individual series, and the results table links each point back to its Rankedin tournament.
 
 This is better described as a timeline with evidence points than as a continuous performance curve. A rolling median or trend line can be considered later, but should not be the default because the sample is sparse and the classes are not equivalent.
 

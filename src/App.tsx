@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   ArrowUpRight,
+  CalendarDays,
   ChevronDown,
   CircleHelp,
   Database,
@@ -11,11 +12,13 @@ import {
   History,
   Info,
   LoaderCircle,
+  LineChart,
   RefreshCw,
   Search,
   Settings2,
   Sparkles,
   Trophy,
+  UserRound,
   Users,
   X,
 } from 'lucide-react'
@@ -23,11 +26,13 @@ import {
   getEventMatches,
   getClassParticipants,
   getPlayerAnalysis,
+  getPlayerProfile,
   getTournamentSnapshot,
   type MatchRecord,
   type PairRecord,
   type PlayerAnalysis,
   type PlayerEventAnalysis,
+  type PlayerProfile,
   type PlayerRecord,
   type TournamentSnapshot,
 } from './lib/rankedin'
@@ -41,6 +46,10 @@ import './App.css'
 
 const DEFAULT_TOURNAMENT_URL =
   'https://www.rankedin.com/en/tournament/70385/meny-x-wepadel-open/players'
+const DEFAULT_PLAYER_REFERENCE =
+  'https://www.rankedin.com/en/player/R000229993/rasmus-kock-thygesen/info'
+
+type WorkspaceMode = 'tournament' | 'player'
 
 const demoParticipants: PairRecord[] = [
   {
@@ -229,6 +238,72 @@ type FieldClassSummary = {
   averageTopPercent: number
   resultCount: number
   playerCount: number
+}
+
+type ProgressPoint = {
+  event: PlayerEventAnalysis
+  className: string
+  percentage: number
+}
+
+type ProgressSeries = {
+  className: string
+  points: ProgressPoint[]
+}
+
+const progressSeriesColors = ['#587866', '#1f6b82', '#d56e59', '#8b6f47', '#6b638c']
+
+function progressPoints(events: PlayerEventAnalysis[]) {
+  return events
+    .map((event): ProgressPoint | null => {
+      const percentage = averagePlacement(event)
+      if (percentage === null || !event.className) return null
+      return { event, className: compactClassName(event.className), percentage }
+    })
+    .filter((point): point is ProgressPoint => point !== null)
+}
+
+function progressSeries(events: PlayerEventAnalysis[]) {
+  const groups = new Map<string, ProgressPoint[]>()
+
+  progressPoints(events).forEach((point) => {
+    const points = groups.get(point.className) ?? []
+    points.push(point)
+    groups.set(point.className, points)
+  })
+
+  return Array.from(groups, ([className, points]): ProgressSeries => ({
+    className,
+    points: points.sort((first, second) => (
+      new Date(first.event.startDate).getTime() - new Date(second.event.startDate).getTime()
+    )),
+  })).sort((first, second) => first.className.localeCompare(second.className))
+}
+
+function median(values: number[]) {
+  if (!values.length) return null
+  const sorted = [...values].sort((first, second) => first - second)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
+}
+
+function formatPercent(value: number | null) {
+  return value === null ? '—' : `${Math.round(value * 100)}%`
+}
+
+function formatChartDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Unknown'
+  return new Intl.DateTimeFormat('en-GB', { month: 'short', year: '2-digit' }).format(date)
+}
+
+function formatProgressDateRange(points: ProgressPoint[]) {
+  if (!points.length) return 'No completed results'
+  const dates = points
+    .map((point) => new Date(point.event.startDate).getTime())
+    .filter((value) => !Number.isNaN(value))
+  if (!dates.length) return 'Date range unavailable'
+  return `${formatChartDate(new Date(Math.min(...dates)).toISOString())} – ${formatChartDate(new Date(Math.max(...dates)).toISOString())}`
 }
 
 function averagePlacement(event: PlayerEventAnalysis) {
@@ -434,12 +509,260 @@ function PlayerHistoryColumn({
   )
 }
 
+type ProgressChartProps = {
+  series: ProgressSeries[]
+}
+
+function ProgressChart({ series }: ProgressChartProps) {
+  const [hiddenSeries, setHiddenSeries] = useState<Record<string, boolean>>({})
+  const [isCompact, setIsCompact] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 620)
+  const visibleSeries = series.filter((item) => !hiddenSeries[item.className])
+  const points = visibleSeries.flatMap((item) => item.points)
+  const chartWidth = isCompact ? 520 : 900
+  const chartHeight = 360
+  const chartTop = 22
+  const chartRight = 28
+  const chartBottom = 48
+  const chartLeft = 58
+  const plotWidth = chartWidth - chartLeft - chartRight
+  const plotHeight = chartHeight - chartTop - chartBottom
+  const timestamps = points
+    .map((point) => new Date(point.event.startDate).getTime())
+    .filter((value) => !Number.isNaN(value))
+  const rawStart = timestamps.length ? Math.min(...timestamps) : Date.now()
+  const rawEnd = timestamps.length ? Math.max(...timestamps) : Date.now()
+  const padding = rawStart === rawEnd ? 1000 * 60 * 60 * 24 * 30 : 0
+  const start = rawStart - padding
+  const end = rawEnd + padding
+  const range = Math.max(end - start, 1)
+  const xPosition = (value: string) => chartLeft + ((new Date(value).getTime() - start) / range) * plotWidth
+  const yPosition = (value: number) => chartTop + value * plotHeight
+  const yTicks = [0, .25, .5, .75, 1]
+  const xTicks = [0, .5, 1]
+
+  useEffect(() => {
+    function updateChartWidth() {
+      setIsCompact(window.innerWidth <= 620)
+    }
+
+    window.addEventListener('resize', updateChartWidth)
+    return () => window.removeEventListener('resize', updateChartWidth)
+  }, [])
+
+  function toggleSeries(className: string) {
+    setHiddenSeries((current) => ({ ...current, [className]: !current[className] }))
+  }
+
+  return (
+    <div className="progress-chart">
+      <div className="progress-legend" aria-label="Chart series">
+        {series.map((item, index) => (
+          <button
+            className={`progress-legend-item ${hiddenSeries[item.className] ? 'is-hidden' : ''}`}
+            type="button"
+            key={item.className}
+            onClick={() => toggleSeries(item.className)}
+            aria-pressed={!hiddenSeries[item.className]}
+          >
+            <span className="progress-legend-dot" style={{ background: progressSeriesColors[index % progressSeriesColors.length] }} />
+            {item.className}
+            <small>{item.points.length}</small>
+          </button>
+        ))}
+      </div>
+
+      {!points.length ? (
+        <div className="progress-chart-empty">Select a class above to show its results.</div>
+      ) : (
+        <svg className="progress-chart-svg" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="Tournament placement timeline">
+          <title>Finished tournament placement timeline</title>
+          {yTicks.map((tick) => (
+            <g key={tick}>
+              <line className="progress-grid-line" x1={chartLeft} x2={chartWidth - chartRight} y1={yPosition(tick)} y2={yPosition(tick)} />
+              <text className="progress-axis-label" x={chartLeft - 11} y={yPosition(tick) + 3} textAnchor="end">Top {Math.round(tick * 100)}%</text>
+            </g>
+          ))}
+          {xTicks.map((tick) => {
+            const timestamp = start + (end - start) * tick
+            return <text className="progress-axis-label" key={tick} x={chartLeft + plotWidth * tick} y={chartHeight - 15} textAnchor={tick === 0 ? 'start' : tick === 1 ? 'end' : 'middle'}>{formatChartDate(new Date(timestamp).toISOString())}</text>
+          })}
+          <line className="progress-axis-line" x1={chartLeft} x2={chartLeft} y1={chartTop} y2={chartHeight - chartBottom} />
+          <line className="progress-axis-line" x1={chartLeft} x2={chartWidth - chartRight} y1={chartHeight - chartBottom} y2={chartHeight - chartBottom} />
+          {visibleSeries.map((item) => {
+            const color = progressSeriesColors[series.indexOf(item) % progressSeriesColors.length]
+            const linePoints = item.points.map((point) => `${xPosition(point.event.startDate)},${yPosition(point.percentage)}`).join(' ')
+            return (
+              <g key={item.className}>
+                {item.points.length > 1 && <polyline className="progress-series-line" points={linePoints} stroke={color} />}
+                {item.points.map((point) => (
+                  <circle
+                    className="progress-series-point"
+                    cx={xPosition(point.event.startDate)}
+                    cy={yPosition(point.percentage)}
+                    fill={color}
+                    key={point.event.id}
+                    r="5"
+                  >
+                    <title>{`${formatDate(point.event.startDate)} · ${point.className} · ${placementSummaryPosition(point.event)} of ${point.event.fieldSize ?? '—'} pairs · ${point.event.name}`}</title>
+                  </circle>
+                ))}
+              </g>
+            )
+          })}
+        </svg>
+      )}
+    </div>
+  )
+}
+
+type PlayerProgressWorkspaceProps = {
+  profile: PlayerProfile | null
+  analysis: PlayerAnalysis | null
+  error: string | null
+  isLoading: boolean
+}
+
+function PlayerProgressWorkspace({ profile, analysis, error, isLoading }: PlayerProgressWorkspaceProps) {
+  const series = useMemo(() => progressSeries(analysis?.events ?? []), [analysis])
+  const points = useMemo(() => series.flatMap((item) => item.points), [series])
+  const latestPoint = [...points].sort((first, second) => (
+    new Date(second.event.startDate).getTime() - new Date(first.event.startDate).getTime()
+  ))[0]
+  const average = points.length ? points.reduce((sum, point) => sum + point.percentage, 0) / points.length : null
+  const unavailableCount = analysis ? analysis.events.length - points.length : 0
+
+  return (
+    <>
+      <section className="workspace-heading">
+        <div>
+          <div className="eyebrow">PLAYER PROGRESS <span className="live-dot" /> {profile ? 'LIVE DATA' : 'READY'}</div>
+          <h2>{profile?.name ?? 'Look up your progress'}</h2>
+          <p>{profile ? `${profile.homeClubName ?? 'Home club unavailable'} / ${profile.countryCode?.toUpperCase() ?? 'Country unavailable'} / ${points.length || 'No'} comparable results` : 'Use a public Rankedin profile to see placement over time.'}</p>
+        </div>
+        {profile && (
+          <div className="workspace-actions">
+            <a className="outline-button" href={`https://www.rankedin.com${profile.url}`} target="_blank" rel="noreferrer">Open profile <ArrowUpRight size={15} /></a>
+          </div>
+        )}
+      </section>
+
+      {error && <div className="error-banner" role="alert"><CircleHelp size={16} /> {error}</div>}
+
+      {isLoading && (
+        <section className="progress-empty-card">
+          <div className="trace-empty-icon"><LoaderCircle className="spin" size={21} /></div>
+          <h3>Reading finished tournament history</h3>
+          <p>Rankedin is checking each event for its class, placement and field size. This can take a moment for a full history.</p>
+        </section>
+      )}
+
+      {!isLoading && !analysis && !error && (
+        <section className="progress-empty-card">
+          <div className="trace-empty-icon"><LineChart size={21} /></div>
+          <h3>Your placement story starts here.</h3>
+          <p>Paste a public Rankedin profile above to compare your finishes across levels and classes.</p>
+          <div className="trace-rule"><span /><span /><span /></div>
+        </section>
+      )}
+
+      {!isLoading && analysis && (
+        <>
+          <section className="metric-grid progress-metric-grid" aria-label="Player progress summary">
+            <div className="metric-card metric-card-dark">
+              <div className="metric-label"><Trophy size={15} /> RESULTS CHARTED</div>
+              <strong>{points.length}</strong>
+              <span>finished tournament placements</span>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label"><Users size={15} /> LEVELS IN HISTORY</div>
+              <strong>{series.length}</strong>
+              <span>level / class series</span>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label"><Gauge size={15} /> AVERAGE FINISH</div>
+              <strong>{formatPercent(average)}</strong>
+              <span>lower is better</span>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label"><CalendarDays size={15} /> LATEST RESULT</div>
+              <strong>{latestPoint ? formatPercent(latestPoint.percentage) : '—'}</strong>
+              <span>{latestPoint ? formatCompactDate(latestPoint.event.startDate) : 'no comparable result'}</span>
+            </div>
+          </section>
+
+          <section className="field-card progress-card">
+            <div className="card-heading">
+              <div>
+                <div className="section-kicker">PLACEMENT TIMELINE</div>
+                <h2>See the level behind the result.</h2>
+                <p>{formatProgressDateRange(points)} <span className="muted-divider">/</span> each point is one finished tournament</p>
+              </div>
+              <span className="progress-card-direction">lower is better</span>
+            </div>
+            <ProgressChart series={series} />
+            <p className="progress-chart-note"><Info size={14} /> Placement percentage is standing divided by the finished field size. Lines only connect results within the same normalized class.</p>
+          </section>
+
+          <section className="progress-series-grid" aria-label="Progress by level and class">
+            {series.map((item, index) => {
+              const values = item.points.map((point) => point.percentage)
+              const itemAverage = values.reduce((sum, value) => sum + value, 0) / values.length
+              const itemMedian = median(values)
+              const latest = item.points[item.points.length - 1]
+              return (
+                <article className="progress-series-card" key={item.className}>
+                  <div className="progress-series-title"><span className="progress-legend-dot" style={{ background: progressSeriesColors[index % progressSeriesColors.length] }} /><strong>{item.className}</strong></div>
+                  <div className="progress-series-values"><span><strong>{formatPercent(itemAverage)}</strong><small>average</small></span><span><strong>{formatPercent(itemMedian)}</strong><small>median</small></span><span><strong>{formatPercent(latest.percentage)}</strong><small>latest</small></span></div>
+                  <span className="progress-series-count">{item.points.length} {item.points.length === 1 ? 'result' : 'results'}</span>
+                </article>
+              )
+            })}
+          </section>
+
+          <section className="field-card progress-results-card">
+            <div className="card-heading">
+              <div>
+                <div className="section-kicker">RECENT RESULTS</div>
+                <h2>Check the points behind the pattern.</h2>
+                <p>{points.length} comparable placements <span className="muted-divider">/</span> {formatProgressDateRange(points)}</p>
+              </div>
+            </div>
+            <div className="table-scroll">
+              <table className="progress-results-table">
+                <thead><tr><th>DATE</th><th>LEVEL / CLASS</th><th>PLACEMENT</th><th>PARTNER</th><th>EVENT</th></tr></thead>
+                <tbody>
+                  {[...points].sort((first, second) => new Date(second.event.startDate).getTime() - new Date(first.event.startDate).getTime()).map((point) => (
+                    <tr key={point.event.id}>
+                      <td>{formatCompactDate(point.event.startDate)}</td>
+                      <td><strong className="progress-result-class">{point.className}</strong><span className="progress-result-raw">{point.event.className}</span></td>
+                      <td><strong className="progress-result-placement">{formatPercent(point.percentage)}</strong><span>{placementSummaryPosition(point.event)} of {point.event.fieldSize ?? '—'} pairs</span></td>
+                      <td>{point.event.partner ?? 'Unavailable'}</td>
+                      <td><a className="progress-event-link" href={`https://www.rankedin.com/en/tournament/${point.event.id}`} target="_blank" rel="noreferrer">{point.event.name}<ArrowUpRight size={13} /></a></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {unavailableCount > 0 && <p className="progress-chart-note"><Info size={14} /> {unavailableCount} event {unavailableCount === 1 ? 'record is' : 'records are'} not shown because Rankedin did not provide a comparable finished placement.</p>}
+          </section>
+        </>
+      )}
+    </>
+  )
+}
+
 function App() {
   const [preferences, setPreferences] = useState<Preferences>(() => {
     if (typeof localStorage === 'undefined') return DEFAULT_PREFERENCES
     return loadPreferences()
   })
+  const [activeMode, setActiveMode] = useState<WorkspaceMode>('tournament')
   const [tournamentUrl, setTournamentUrl] = useState(DEFAULT_TOURNAMENT_URL)
+  const [playerReference, setPlayerReference] = useState(DEFAULT_PLAYER_REFERENCE)
+  const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null)
+  const [playerAnalysis, setPlayerAnalysis] = useState<PlayerAnalysis | null>(null)
+  const [isAnalyzingPlayer, setIsAnalyzingPlayer] = useState(false)
+  const [playerError, setPlayerError] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<TournamentSnapshot>(demoSnapshot)
   const [selectedPairId, setSelectedPairId] = useState<string | null>(null)
   const [pairHistory, setPairHistory] = useState<{
@@ -455,6 +778,7 @@ function App() {
   const [isLoadingFieldPlacements, setIsLoadingFieldPlacements] = useState(false)
   const [fieldPlacementError, setFieldPlacementError] = useState<string | null>(null)
   const fieldPlacementRequestRef = useRef(0)
+  const playerRequestRef = useRef(0)
   const [error, setError] = useState<string | null>(null)
   const [showPreferences, setShowPreferences] = useState(false)
 
@@ -509,6 +833,28 @@ function App() {
       setError(caught instanceof Error ? caught.message : 'The tournament could not be loaded.')
     } finally {
       setIsAnalyzing(false)
+    }
+  }
+
+  async function analyzePlayer() {
+    const requestId = playerRequestRef.current + 1
+    playerRequestRef.current = requestId
+    setIsAnalyzingPlayer(true)
+    setPlayerError(null)
+    setPlayerProfile(null)
+    setPlayerAnalysis(null)
+
+    try {
+      const profile = await getPlayerProfile(playerReference)
+      const analysis = await getPlayerAnalysis(profile.id, 25)
+      if (requestId !== playerRequestRef.current) return
+      setPlayerProfile(profile)
+      setPlayerAnalysis({ ...analysis, playerName: profile.name })
+    } catch (caught) {
+      if (requestId !== playerRequestRef.current) return
+      setPlayerError(caught instanceof Error ? caught.message : 'The player could not be loaded.')
+    } finally {
+      if (requestId === playerRequestRef.current) setIsAnalyzingPlayer(false)
     }
   }
 
@@ -593,6 +939,8 @@ function App() {
   }
 
   function resetToPreview() {
+    playerRequestRef.current += 1
+    setActiveMode('tournament')
     fieldPlacementRequestRef.current += 1
     setSnapshot(demoSnapshot)
     setTournamentUrl(DEFAULT_TOURNAMENT_URL)
@@ -604,6 +952,10 @@ function App() {
     setIsLoadingFieldPlacements(false)
     setSearchTerm('')
     setError(null)
+    setPlayerProfile(null)
+    setPlayerAnalysis(null)
+    setPlayerError(null)
+    setIsAnalyzingPlayer(false)
   }
 
   return (
@@ -695,29 +1047,51 @@ function App() {
             </p>
 
             <div className="input-card">
-              <label htmlFor="tournament-url">Start with a public tournament</label>
-              <div className="url-input-row">
-                <div className="url-input-wrap">
-                  <GitBranch size={17} />
-                  <input
-                    id="tournament-url"
-                    value={tournamentUrl}
-                    onChange={(event) => setTournamentUrl(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') void analyzeTournament()
-                    }}
-                    placeholder="Paste a Rankedin tournament URL or ID"
-                  />
-                  {tournamentUrl && <button className="clear-input" type="button" aria-label="Clear tournament URL" onClick={() => setTournamentUrl('')}><X size={14} /></button>}
-                </div>
-                <button className="primary-button" type="button" onClick={() => void analyzeTournament()} disabled={isAnalyzing || !tournamentUrl.trim()}>
-                  {isAnalyzing ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}
-                  {isAnalyzing ? 'Reading…' : 'Analyze field'}
+              <div className="mode-switch" role="tablist" aria-label="Choose what to explore">
+                <button
+                  className={activeMode === 'tournament' ? 'is-active' : ''}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeMode === 'tournament'}
+                  onClick={() => { setActiveMode('tournament'); setPlayerError(null) }}
+                >
+                  <Trophy size={14} /> Tournament Explorer
+                </button>
+                <button
+                  className={activeMode === 'player' ? 'is-active' : ''}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeMode === 'player'}
+                  onClick={() => { setActiveMode('player'); setError(null) }}
+                >
+                  <LineChart size={14} /> Player Progress
                 </button>
               </div>
-              <p className="input-hint"><Info size={14} /> No login. No database. The example field is ready to explore.</p>
+              <label htmlFor={activeMode === 'tournament' ? 'tournament-url' : 'player-reference'}>
+                {activeMode === 'tournament' ? 'Start with a public tournament' : 'Start with a public Rankedin profile'}
+              </label>
+              <div className="url-input-row">
+                <div className="url-input-wrap">
+                  {activeMode === 'tournament' ? <GitBranch size={17} /> : <UserRound size={17} />}
+                  <input
+                    id={activeMode === 'tournament' ? 'tournament-url' : 'player-reference'}
+                    value={activeMode === 'tournament' ? tournamentUrl : playerReference}
+                    onChange={(event) => activeMode === 'tournament' ? setTournamentUrl(event.target.value) : setPlayerReference(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void (activeMode === 'tournament' ? analyzeTournament() : analyzePlayer())
+                    }}
+                    placeholder={activeMode === 'tournament' ? 'Paste a Rankedin tournament URL or ID' : 'Paste a Rankedin profile URL or R-number'}
+                  />
+                  {(activeMode === 'tournament' ? tournamentUrl : playerReference) && <button className="clear-input" type="button" aria-label={`Clear ${activeMode} reference`} onClick={() => activeMode === 'tournament' ? setTournamentUrl('') : setPlayerReference('')}><X size={14} /></button>}
+                </div>
+                <button className="primary-button" type="button" onClick={() => void (activeMode === 'tournament' ? analyzeTournament() : analyzePlayer())} disabled={activeMode === 'tournament' ? isAnalyzing || !tournamentUrl.trim() : isAnalyzingPlayer || !playerReference.trim()}>
+                  {(activeMode === 'tournament' ? isAnalyzing : isAnalyzingPlayer) ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}
+                  {(activeMode === 'tournament' ? isAnalyzing : isAnalyzingPlayer) ? 'Reading…' : activeMode === 'tournament' ? 'Analyze field' : 'Read progress'}
+                </button>
+              </div>
+              <p className="input-hint"><Info size={14} /> No login. No database. {activeMode === 'tournament' ? 'The example field is ready to explore.' : 'Only finished public tournament results are charted.'}</p>
             </div>
-            {error && <div className="error-banner" role="alert"><CircleHelp size={16} /> {error}</div>}
+            {(activeMode === 'tournament' ? error : playerError) && <div className="error-banner" role="alert"><CircleHelp size={16} /> {activeMode === 'tournament' ? error : playerError}</div>}
           </div>
 
           <aside className="signal-card">
@@ -733,7 +1107,9 @@ function App() {
           </aside>
         </section>
 
-        <section className="workspace-heading">
+        {activeMode === 'tournament' ? (
+          <>
+            <section className="workspace-heading">
           <div>
             <div className="eyebrow">CURRENT FIELD <span className="live-dot" /> {snapshot.source === 'live' ? 'LIVE DATA' : 'PREVIEW DATA'}</div>
             <h2>{snapshot.name}</h2>
@@ -931,11 +1307,20 @@ function App() {
           </aside>
         </section>
 
-        <section className="privacy-strip">
-          <div className="privacy-icon"><Database size={17} /></div>
-          <div><strong>Nothing follows you home.</strong><span>Only small display preferences live in this browser. Tournament and player selections stay in temporary page state.</span></div>
-          <button className="privacy-link" type="button" onClick={() => setShowPreferences(true)}>Review preferences <ArrowUpRight size={14} /></button>
-        </section>
+            <section className="privacy-strip">
+              <div className="privacy-icon"><Database size={17} /></div>
+              <div><strong>Nothing follows you home.</strong><span>Only small display preferences live in this browser. Tournament and player selections stay in temporary page state.</span></div>
+              <button className="privacy-link" type="button" onClick={() => setShowPreferences(true)}>Review preferences <ArrowUpRight size={14} /></button>
+            </section>
+          </>
+        ) : (
+          <PlayerProgressWorkspace
+            profile={playerProfile}
+            analysis={playerAnalysis}
+            error={playerError}
+            isLoading={isAnalyzingPlayer}
+          />
+        )}
       </main>
 
       <footer className="footer"><span>Rankedin Explorer</span><span>Read-only personal utility <span className="muted-divider">/</span> source data remains with Rankedin</span><a href="https://api.rankedin.com/swagger/v1/swagger.json" target="_blank" rel="noreferrer">API map <ArrowUpRight size={13} /></a></footer>
