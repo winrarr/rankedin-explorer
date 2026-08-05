@@ -919,7 +919,7 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
       {seasonSlots.map((slot) => (
         <text className="league-season-axis-label" key={slot.season.id} x={slot.x + slot.width / 2} y={chartHeight - 15} textAnchor="middle">{leagueSeasonAxisLabel(slot.season)}</text>
       ))}
-      <text className="league-axis-caption" x="15" y={chartTop - 9}>HIGHER DIVISION · BETTER RANK</text>
+      <text className="league-axis-caption" x={scale.chartLeft} y={chartTop - 9}>HIGHER DIVISION · BETTER RANK</text>
       <line className="league-axis-line" x1={scale.chartLeft} x2={scale.chartLeft} y1={chartTop} y2={chartHeight - chartBottom} />
       <line className="league-axis-line" x1={scale.chartLeft} x2={scale.chartWidth - scale.chartRight} y1={chartHeight - chartBottom} y2={chartHeight - chartBottom} />
       {[...divisionTeamCounts.entries()].map(([divisionIndex, teamCount]) => {
