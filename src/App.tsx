@@ -798,8 +798,8 @@ type LeagueTimeScale = {
 }
 
 function leagueTimeScale(chartWidth: number): LeagueTimeScale {
-  const chartLeft = 102
-  const chartRight = 30
+  const chartLeft = 90
+  const chartRight = 18
   return {
     chartWidth,
     chartLeft,
@@ -842,7 +842,6 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
   const divisionHeight = Math.max(160, maxTeamCount * 28)
   const chartHeight = chartTop + visibleDivisions.length * divisionHeight + chartBottom
   const divisionTop = (divisionName: string) => chartTop + (leagueDivisionIndex(divisionName) - firstVisibleDivision) * divisionHeight
-  const divisionCenter = (divisionName: string) => divisionTop(divisionName) + divisionHeight / 2
   const standingPosition = (divisionName: string, standing: number, teamCount: number) => {
     const firstPlace = divisionTop(divisionName) + rankInset
     const lastPlace = divisionTop(divisionName) + divisionHeight - rankInset
@@ -887,18 +886,11 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
       y: standingPosition(season.divisionName, finalStanding, finalTeamCount),
     }
     const finalPositionChanged = finalStanding !== null && finalSnapshot?.standing !== finalStanding
-    const firstPoint = points[0] ?? finalPoint ?? { x: slot.x, y: divisionCenter(season.divisionName) }
-    const lastPoint = points.at(-1) ?? finalPoint ?? { x: slot.x + slot.width, y: divisionCenter(season.divisionName) }
-    const endPoint = finalPositionChanged && finalPoint ? finalPoint : lastPoint
     return {
       season,
-      slot,
       points,
       color: colors[seasonIndex % colors.length],
       finalPoint,
-      firstPoint,
-      lastPoint,
-      endPoint,
       finalStanding,
       finalTeamCount,
       finalPositionChanged,
@@ -947,19 +939,14 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
           </g>
         )
       })}
-      {seasonPaths.slice(1).map((current, index) => {
-        const previous = seasonPaths[index]
-        return <polyline className="league-connector" key={`${previous.season.id}-${current.season.id}`} points={`${previous.endPoint.x},${previous.endPoint.y} ${current.firstPoint.x},${previous.endPoint.y} ${current.firstPoint.x},${current.firstPoint.y}`} />
-      })}
-      {seasonPaths.map(({ season, slot, points, color, finalPoint, finalStanding, finalTeamCount, finalPositionChanged }) => {
+      {seasonPaths.map(({ season, points, color, finalPoint, finalStanding, finalTeamCount, finalPositionChanged }) => {
         const linePoints = points.map((point) => `${point.x},${point.y}`).join(' ')
         return (
           <g key={season.id}>
-            <line className="league-season-rail" x1={slot.x} x2={slot.x + slot.width} y1={divisionCenter(season.divisionName)} y2={divisionCenter(season.divisionName)} stroke={color} />
             {points.length > 1 && <polyline className="league-standing-line" points={linePoints} stroke={color} />}
-            {finalPoint && <>
+            {finalPoint && finalPositionChanged && <>
               <circle className="league-season-end-point" cx={finalPoint.x} cy={finalPoint.y} r="5" fill={color} />
-              {finalPositionChanged && <text className="league-season-label" x={finalPoint.x} y={finalPoint.y - 11} textAnchor="middle">{ordinalPosition(finalStanding)} / {finalTeamCount}</text>}
+              <text className="league-season-label" x={finalPoint.x} y={finalPoint.y - 11} textAnchor="middle">{ordinalPosition(finalStanding)} / {finalTeamCount}</text>
             </>}
             {points.map((point, pointIndex) => {
               const x = point.x
@@ -1007,8 +994,6 @@ function LeagueProgressChart({ seasons }: LeagueProgressChartProps) {
       <div className="league-chart-subheading"><strong>Division and table position</strong><span>Seasons are shown in order; off-season gaps are compressed.</span></div>
       <LeagueCombinedChart seasons={seasons} scale={scale} />
       <div className="league-chart-legend">
-        <span><i className="league-legend-rail" /> Season fixture span</span>
-        <span><i className="league-legend-step" /> Division change</span>
         <span><i className="league-result-marker league-result-marker-win">W</i> Win</span>
         <span><i className="league-result-marker league-result-marker-loss">L</i> Loss</span>
         <span><i className="league-result-marker league-result-marker-draw">D</i> Draw</span>
@@ -1080,7 +1065,7 @@ function LeagueProgressSection({ seasons, isLoading, error }: LeagueProgressSect
               )
             })}
           </div>
-          <p className="league-chart-note"><Info size={14} /> Division is categorical, not a numeric rating. A dashed connector shows movement between seasons, while each checkpoint is calculated after the team’s own fixture using all completed pool fixtures up to that point.</p>
+          <p className="league-chart-note"><Info size={14} /> Division is categorical, not a numeric rating. Each season has its own fixture slot, while each checkpoint is calculated after the team’s own fixture using all completed pool fixtures up to that point.</p>
         </>
       )}
     </section>
