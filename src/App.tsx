@@ -28,6 +28,7 @@ import {
   getPlayerAnalysis,
   getPlayerProfile,
   getTournamentSnapshot,
+  mapWithConcurrency,
   type MatchRecord,
   type PairRecord,
   type PlayerAnalysis,
@@ -620,9 +621,10 @@ type PlayerProgressWorkspaceProps = {
   analysis: PlayerAnalysis | null
   error: string | null
   isLoading: boolean
+  loadingStage: 'profile' | 'history' | null
 }
 
-function PlayerProgressWorkspace({ profile, analysis, error, isLoading }: PlayerProgressWorkspaceProps) {
+function PlayerProgressWorkspace({ profile, analysis, error, isLoading, loadingStage }: PlayerProgressWorkspaceProps) {
   const series = useMemo(() => progressSeries(analysis?.events ?? []), [analysis])
   const points = useMemo(() => series.flatMap((item) => item.points), [series])
   const latestPoint = [...points].sort((first, second) => (
@@ -648,12 +650,21 @@ function PlayerProgressWorkspace({ profile, analysis, error, isLoading }: Player
 
       {error && <div className="error-banner" role="alert"><CircleHelp size={16} /> {error}</div>}
 
-      {isLoading && (
+      {isLoading && !analysis && (
         <section className="progress-empty-card">
           <div className="trace-empty-icon"><LoaderCircle className="spin" size={21} /></div>
-          <h3>Reading finished tournament history</h3>
-          <p>Rankedin is checking each event for its class, placement and field size. This can take a moment for a full history.</p>
+          <h3>{loadingStage === 'profile' ? 'Finding the public profile' : 'Reading finished tournament history'}</h3>
+          <p>{loadingStage === 'profile'
+            ? 'The profile is being resolved before its tournament history is checked.'
+            : 'Rankedin is checking the latest finished events for their class, placement and field size.'}</p>
         </section>
+      )}
+
+      {isLoading && analysis && (
+        <div className="progress-loading-strip" aria-live="polite">
+          <LoaderCircle className="spin" size={15} />
+          <span>{loadingStage === 'history' ? `Reading history · ${analysis.events.length} of the latest events found so far` : 'Resolving public profile'}</span>
+        </div>
       )}
 
       {!isLoading && !analysis && !error && (
@@ -665,7 +676,7 @@ function PlayerProgressWorkspace({ profile, analysis, error, isLoading }: Player
         </section>
       )}
 
-      {!isLoading && analysis && (
+      {analysis && (
         <>
           <section className="metric-grid progress-metric-grid" aria-label="Player progress summary">
             <div className="metric-card metric-card-dark">
@@ -762,6 +773,7 @@ function App() {
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null)
   const [playerAnalysis, setPlayerAnalysis] = useState<PlayerAnalysis | null>(null)
   const [isAnalyzingPlayer, setIsAnalyzingPlayer] = useState(false)
+  const [playerLoadingStage, setPlayerLoadingStage] = useState<'profile' | 'history' | null>(null)
   const [playerError, setPlayerError] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<TournamentSnapshot>(demoSnapshot)
   const [selectedPairId, setSelectedPairId] = useState<string | null>(null)
@@ -788,8 +800,9 @@ function App() {
   }, [preferences])
 
   useEffect(() => {
+    if (activeMode !== 'tournament' || snapshot.source !== 'live') return
     void loadFieldPlacements(snapshot.participants)
-  }, [snapshot.participants, snapshot.selectedClass.id])
+  }, [activeMode, snapshot.participants, snapshot.selectedClass.id, snapshot.source])
 
   const visibleParticipants = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -840,21 +853,39 @@ function App() {
     const requestId = playerRequestRef.current + 1
     playerRequestRef.current = requestId
     setIsAnalyzingPlayer(true)
+    setPlayerLoadingStage('profile')
     setPlayerError(null)
     setPlayerProfile(null)
     setPlayerAnalysis(null)
 
     try {
       const profile = await getPlayerProfile(playerReference)
-      const analysis = await getPlayerAnalysis(profile.id, 25)
       if (requestId !== playerRequestRef.current) return
       setPlayerProfile(profile)
+      setPlayerAnalysis({ playerId: profile.id, playerName: profile.name, events: [] })
+      setPlayerLoadingStage('history')
+      const analysis = await getPlayerAnalysis(profile.id, preferences.historyLimit, (event) => {
+        if (requestId !== playerRequestRef.current) return
+        setPlayerAnalysis((current) => {
+          if (!current || current.playerId !== profile.id) return current
+          return {
+            ...current,
+            events: [...current.events, event].sort((first, second) => (
+              new Date(second.startDate).getTime() - new Date(first.startDate).getTime()
+            )),
+          }
+        })
+      })
+      if (requestId !== playerRequestRef.current) return
       setPlayerAnalysis({ ...analysis, playerName: profile.name })
     } catch (caught) {
       if (requestId !== playerRequestRef.current) return
       setPlayerError(caught instanceof Error ? caught.message : 'The player could not be loaded.')
     } finally {
-      if (requestId === playerRequestRef.current) setIsAnalyzingPlayer(false)
+      if (requestId === playerRequestRef.current) {
+        setIsAnalyzingPlayer(false)
+        setPlayerLoadingStage(null)
+      }
     }
   }
 
@@ -910,27 +941,50 @@ function App() {
     const players = participants.flatMap((pair) => [pair.first, pair.second])
     setIsLoadingFieldPlacements(true)
     setFieldPlacementError(null)
+    setFieldPlacementSummaries({})
+    setFieldPlacementsLoaded(false)
 
-    const results = await Promise.allSettled(
-      players.map((player) => getPlayerAnalysis(player.id, 5)),
-    )
-    const summaries: Record<number, PlayerAnalysis | null> = {}
+    const results = await mapWithConcurrency(players, 2, async (player) => {
+      try {
+        const analysis = await getPlayerAnalysis(player.id, 5, (event) => {
+          if (requestId !== fieldPlacementRequestRef.current) return
+          setFieldPlacementSummaries((current) => {
+            const previous = current[player.id]
+            const events = [...(previous?.events ?? []), event].sort((first, second) => (
+              new Date(second.startDate).getTime() - new Date(first.startDate).getTime()
+            ))
+            return {
+              ...current,
+              [player.id]: {
+                playerId: player.id,
+                playerName: player.name,
+                events,
+              },
+            }
+          })
+        })
+        if (requestId === fieldPlacementRequestRef.current) {
+          setFieldPlacementSummaries((current) => ({
+            ...current,
+            [player.id]: { ...analysis, playerName: player.name },
+          }))
+        }
+        return { player, analysis, failed: false }
+      } catch {
+        if (requestId === fieldPlacementRequestRef.current) {
+          setFieldPlacementSummaries((current) => ({ ...current, [player.id]: null }))
+        }
+        return { player, analysis: null, failed: true }
+      }
+    })
     let failedCount = 0
 
-    results.forEach((result, index) => {
-      const player = players[index]
-      if (result.status === 'fulfilled') {
-        summaries[player.id] = { ...result.value, playerName: player.name }
-        return
-      }
-
-      summaries[player.id] = null
-      failedCount += 1
+    results.forEach(({ failed }) => {
+      if (failed) failedCount += 1
     })
 
     if (requestId !== fieldPlacementRequestRef.current) return
 
-    setFieldPlacementSummaries(summaries)
     setFieldPlacementsLoaded(true)
     if (failedCount) {
       setFieldPlacementError(`${failedCount} player ${failedCount === 1 ? 'summary was' : 'summaries were'} unavailable.`)
@@ -956,6 +1010,22 @@ function App() {
     setPlayerAnalysis(null)
     setPlayerError(null)
     setIsAnalyzingPlayer(false)
+    setPlayerLoadingStage(null)
+  }
+
+  function switchMode(nextMode: WorkspaceMode) {
+    if (nextMode === activeMode) return
+
+    fieldPlacementRequestRef.current += 1
+    setIsLoadingFieldPlacements(false)
+    if (nextMode === 'tournament') {
+      playerRequestRef.current += 1
+      setIsAnalyzingPlayer(false)
+      setPlayerLoadingStage(null)
+    }
+    setActiveMode(nextMode)
+    setError(null)
+    setPlayerError(null)
   }
 
   return (
@@ -967,7 +1037,7 @@ function App() {
         </a>
 
         <div className="topbar-actions">
-          <span className="topbar-label">FIELD GUIDE <span>01</span></span>
+          <span className="topbar-label">READ-ONLY TOOL</span>
           <a className="source-link" href="https://www.rankedin.com" target="_blank" rel="noreferrer">
             Rankedin source <ExternalLink size={14} />
           </a>
@@ -1037,6 +1107,32 @@ function App() {
         )}
       </header>
 
+      <nav className="workspace-nav" aria-label="Choose workspace">
+        <div className="workspace-nav-inner">
+          <span className="workspace-nav-label">WORKSPACE</span>
+          <div className="workspace-nav-tabs" role="tablist">
+            <button
+              className={activeMode === 'tournament' ? 'is-active' : ''}
+              type="button"
+              role="tab"
+              aria-selected={activeMode === 'tournament'}
+              onClick={() => switchMode('tournament')}
+            >
+              <Trophy size={15} /> Tournament Explorer
+            </button>
+            <button
+              className={activeMode === 'player' ? 'is-active' : ''}
+              type="button"
+              role="tab"
+              aria-selected={activeMode === 'player'}
+              onClick={() => switchMode('player')}
+            >
+              <LineChart size={15} /> Player Progress
+            </button>
+          </div>
+        </div>
+      </nav>
+
       <main>
         <section className="hero-grid">
           <div className="hero-copy">
@@ -1047,26 +1143,6 @@ function App() {
             </p>
 
             <div className="input-card">
-              <div className="mode-switch" role="tablist" aria-label="Choose what to explore">
-                <button
-                  className={activeMode === 'tournament' ? 'is-active' : ''}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeMode === 'tournament'}
-                  onClick={() => { setActiveMode('tournament'); setPlayerError(null) }}
-                >
-                  <Trophy size={14} /> Tournament Explorer
-                </button>
-                <button
-                  className={activeMode === 'player' ? 'is-active' : ''}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeMode === 'player'}
-                  onClick={() => { setActiveMode('player'); setError(null) }}
-                >
-                  <LineChart size={14} /> Player Progress
-                </button>
-              </div>
               <label htmlFor={activeMode === 'tournament' ? 'tournament-url' : 'player-reference'}>
                 {activeMode === 'tournament' ? 'Start with a public tournament' : 'Start with a public Rankedin profile'}
               </label>
@@ -1095,14 +1171,14 @@ function App() {
           </div>
 
           <aside className="signal-card">
-            <div className="signal-topline"><span>HOW TO READ THIS</span><span className="signal-number">01 / 03</span></div>
+            <div className="signal-topline"><span>HOW TO READ THIS</span></div>
             <div className="signal-icon"><Gauge size={21} /></div>
-            <h2>Three signals beat one win rate.</h2>
-            <p>Class level tells you where they played. Rating tells you the baseline. Results tell you what happened there.</p>
+            <h2>Three questions beat one win rate.</h2>
+            <p>Use the field level, the finish and the match context together to understand what a Rankedin result really says.</p>
             <div className="signal-list">
-              <div><span className="signal-dot signal-dot-sage" /><span>Actual class entered</span><strong>level</strong></div>
-              <div><span className="signal-dot signal-dot-blue" /><span>Skill at event start</span><strong>rating</strong></div>
-              <div><span className="signal-dot signal-dot-coral" /><span>Placement + matches</span><strong>form</strong></div>
+              <div><span className="signal-dot signal-dot-sage" /><span>Where did they play?</span><strong>level</strong></div>
+              <div><span className="signal-dot signal-dot-blue" /><span>How did they finish?</span><strong>placement</strong></div>
+              <div><span className="signal-dot signal-dot-coral" /><span>Who did they face?</span><strong>matches</strong></div>
             </div>
           </aside>
         </section>
@@ -1155,7 +1231,9 @@ function App() {
               <div className="field-card-tools">
                 <div className="placement-load-status" aria-live="polite">
                   {isLoadingFieldPlacements ? <LoaderCircle className="spin" size={14} /> : <History size={14} />}
-                  {isLoadingFieldPlacements ? 'Reading latest 5 per player…' : fieldPlacementsLoaded ? 'Latest 5 per player' : 'Placement summary unavailable'}
+                  {isLoadingFieldPlacements
+                    ? `Reading latest 5 · ${Object.keys(fieldPlacementSummaries).length}/${snapshot.participants.length * 2} players…`
+                    : fieldPlacementsLoaded ? 'Latest 5 per player' : 'Placement summary unavailable'}
                 </div>
                 <div className="class-picker-wrap">
                   <select value={snapshot.selectedClass.id} onChange={(event) => void chooseClass(Number(event.target.value))} disabled={isLoadingClass || isLoadingFieldPlacements} aria-label="Choose tournament class">
@@ -1167,7 +1245,7 @@ function App() {
               </div>
             </div>
 
-            {fieldPlacementsLoaded && (
+            {(fieldPlacementsLoaded || Object.keys(fieldPlacementSummaries).length > 0) && (
               <section className="field-aggregate" aria-label="Average recent placement by class">
                 <div className="field-aggregate-heading">
                   <div>
@@ -1223,14 +1301,16 @@ function App() {
                           <div className="field-placement-cell">
                             {[pair.first, pair.second].map((player) => {
                               const summary = fieldPlacementSummaries[player.id]
+                              const hasSummary = Object.prototype.hasOwnProperty.call(fieldPlacementSummaries, player.id)
                               const events = fieldPlacementEvents(summary ?? null)
                               return (
                                 <div className="field-placement-player" key={player.id}>
                                   <span className="field-placement-player-name">{player.name}</span>
                                   <span className="field-placement-tags">
-                                    {!fieldPlacementsLoaded && <span className="field-placement-muted">Not loaded</span>}
-                                    {fieldPlacementsLoaded && summary === null && <span className="field-placement-muted">Unavailable</span>}
-                                    {fieldPlacementsLoaded && summary && !events.length && <span className="field-placement-muted">No finished events</span>}
+                                    {!hasSummary && isLoadingFieldPlacements && <span className="field-placement-muted">Reading…</span>}
+                                    {!hasSummary && !isLoadingFieldPlacements && !fieldPlacementsLoaded && <span className="field-placement-muted">Not loaded</span>}
+                                    {hasSummary && summary === null && <span className="field-placement-muted">Unavailable</span>}
+                                    {hasSummary && summary && !events.length && <span className="field-placement-muted">No finished events</span>}
                                     {events.map((event) => {
                                       const placement = fieldPlacementSummary(event)
                                       return (
@@ -1319,6 +1399,7 @@ function App() {
             analysis={playerAnalysis}
             error={playerError}
             isLoading={isAnalyzingPlayer}
+            loadingStage={playerLoadingStage}
           />
         )}
       </main>

@@ -130,8 +130,14 @@ type RawPlayerProfileResponse = {
 
 type RawStandingResponse = {
   TournamentId: number
-  Classes: Array<{ Id: number; Name: string; ParticipantsType: number }>
+  Classes: RawClassOption[]
   Rankings: Array<{ Id: number; Name: string }>
+}
+
+type RawClassOption = {
+  Id: number
+  Name: string
+  ParticipantsType: number
 }
 
 type RawClassDraw = {
@@ -169,6 +175,12 @@ type RawResult = {
 
 type RawResultsResponse = {
   Data: RawResult[]
+}
+
+type PlayerClassResult = {
+  classOption: RawClassOption
+  result: RawResultsResponse
+  playerResult: RawResult
 }
 
 type RawSide = {
@@ -240,7 +252,7 @@ function query(params: Record<string, string | number | boolean | undefined>) {
   return `?${search.toString()}`
 }
 
-async function mapWithConcurrency<T, R>(
+export async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,
   mapper: (item: T) => Promise<R>,
@@ -260,6 +272,50 @@ async function mapWithConcurrency<T, R>(
     Array.from({ length: Math.min(limit, items.length) }, () => worker()),
   )
   return results
+}
+
+async function findPlayerClassResult(
+  eventId: number,
+  classes: RawClassOption[],
+  rankingId: number | undefined,
+  playerId: number,
+): Promise<PlayerClassResult | null> {
+  let nextIndex = 0
+  let match: PlayerClassResult | null = null
+
+  async function worker() {
+    while (!match) {
+      const currentIndex = nextIndex
+      if (currentIndex >= classes.length) return
+      nextIndex += 1
+
+      const classOption = classes[currentIndex]
+      try {
+        const result = await request<RawResultsResponse>(
+          `/tournament/GetResultsAsync${query({
+            tournamentId: eventId,
+            classId: classOption.Id,
+            rankingId,
+            language: 'en',
+          })}`,
+        )
+        const playerResult = result.Data.find(
+          (item) => item.Player1ParticipantId === playerId || item.Player2ParticipantId === playerId,
+        )
+        if (playerResult) {
+          match = { classOption, result, playerResult }
+          return
+        }
+      } catch {
+        // A private or unavailable class should not prevent the other classes from being checked.
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(4, classes.length) }, () => worker()),
+  )
+  return match
 }
 
 function normalizePlayer(player: RawPlayer): PlayerRecord {
@@ -494,43 +550,21 @@ async function analyzeEvent(event: RawEvent, playerId: number): Promise<PlayerEv
     )
     const rankingId = standings.Rankings[0]?.Id
 
-    const classResults = await mapWithConcurrency(standings.Classes, 4, async (classOption) => {
-      try {
-        const result = await request<RawResultsResponse>(
-          `/tournament/GetResultsAsync${query({
-            tournamentId: event.Id,
-            classId: classOption.Id,
-            rankingId,
-            language: 'en',
-          })}`,
-        )
-        return { classOption, result }
-      } catch {
-        return null
-      }
-    })
-    const matchingClass = classResults.find((item) =>
-      item?.result.Data.some(
-        (result) => result.Player1ParticipantId === playerId || result.Player2ParticipantId === playerId,
-      ),
-    )
-    const playerResult = matchingClass?.result.Data.find(
-      (item) => item.Player1ParticipantId === playerId || item.Player2ParticipantId === playerId,
-    )
-    if (!matchingClass || !playerResult) return base
+    const match = await findPlayerClassResult(event.Id, standings.Classes, rankingId, playerId)
+    if (!match) return base
 
-    const playerIsFirst = playerResult.Player1ParticipantId === playerId
+    const playerIsFirst = match.playerResult.Player1ParticipantId === playerId
     return {
       ...base,
-      className: matchingClass.classOption.Name,
-      standing: playerResult.Standing,
-      standingRangeTo: playerResult.StandingRangeTo || null,
-      fieldSize: matchingClass.result.Data.length || null,
-      ratingBegin: playerIsFirst ? playerResult.Player1RatingBegin : playerResult.Player2RatingBegin,
-      ratingEnd: playerIsFirst ? playerResult.Player1RatingEnd : playerResult.Player2RatingEnd,
-      rankingPoints: playerResult.RankingPoint?.Points ?? null,
-      partner: playerIsFirst ? playerResult.Player2Name : playerResult.Player1Name,
-      matchQuery: { tournamentId: event.Id, classId: matchingClass.classOption.Id },
+      className: match.classOption.Name,
+      standing: match.playerResult.Standing,
+      standingRangeTo: match.playerResult.StandingRangeTo || null,
+      fieldSize: match.result.Data.length || null,
+      ratingBegin: playerIsFirst ? match.playerResult.Player1RatingBegin : match.playerResult.Player2RatingBegin,
+      ratingEnd: playerIsFirst ? match.playerResult.Player1RatingEnd : match.playerResult.Player2RatingEnd,
+      rankingPoints: match.playerResult.RankingPoint?.Points ?? null,
+      partner: playerIsFirst ? match.playerResult.Player2Name : match.playerResult.Player1Name,
+      matchQuery: { tournamentId: event.Id, classId: match.classOption.Id },
       matches: [],
     }
   } catch {
@@ -538,7 +572,11 @@ async function analyzeEvent(event: RawEvent, playerId: number): Promise<PlayerEv
   }
 }
 
-export async function getPlayerAnalysis(playerId: number, maxEvents = 10): Promise<PlayerAnalysis> {
+export async function getPlayerAnalysis(
+  playerId: number,
+  maxEvents = 10,
+  onEvent?: (event: PlayerEventAnalysis) => void,
+): Promise<PlayerAnalysis> {
   const response = await request<RawEventsResponse>(
     `/player/ParticipatedEventsAsync${query({
       PlayerId: playerId,
@@ -550,7 +588,11 @@ export async function getPlayerAnalysis(playerId: number, maxEvents = 10): Promi
   const finishedEvents = response.Payload
     .filter((event) => event.State === FINISHED_EVENT_STATE && event.Type === 4)
     .slice(0, maxEvents)
-  const events = await mapWithConcurrency(finishedEvents, 4, (event) => analyzeEvent(event, playerId))
+  const events = await mapWithConcurrency(finishedEvents, 5, async (event) => {
+    const analysis = await analyzeEvent(event, playerId)
+    onEvent?.(analysis)
+    return analysis
+  })
 
   return { playerId, playerName: 'Selected player', events }
 }

@@ -15,6 +15,7 @@ The browser client uses the public base URL `https://api.rankedin.com/v1`. API a
 - `GET /Tournament/GetPlayersForClassAsync?tournamentId=...&tournamentClassId=...&language=en` returns the pairs in a class.
 - `GET /Tournament/GetResultsAsync?tournamentId=...&classId=...&rankingId=...&language=en` returns the class result rows used to identify a player's class, standing, field size and rating values.
 - `GET /Tournament/GetClassesAndDrawNamesAsync?tournamentId=...` and `GET /Tournament/GetMatchesSectionAsync?...` provide draw and match data for exploratory detail.
+- `GET /Player/GetLastEventsPlayedAsync?...` and `GET /Player/GetPlayerMatchesAsync?...` expose convenient recent-match/profile data, but neither returns the tournament class, final standing and field size needed for placement analysis. Keep using the event standings/results path for that insight.
 
 The implementation and endpoint-specific raw types live in [`src/lib/rankedin.ts`](../src/lib/rankedin.ts). Keep PascalCase API payloads and URL construction there; UI code should consume normalized domain types.
 
@@ -29,6 +30,6 @@ The implementation and endpoint-specific raw types live in [`src/lib/rankedin.ts
 
 ## Request discipline
 
-Keep requests read-only, bounded and cache-friendly. The API client has a small in-memory response cache and bounded event analysis concurrency. A feature that loads a full player history must page deliberately rather than assuming that the first response contains every event.
+Keep requests read-only, bounded and cache-friendly. The API client has a small in-memory response cache, bounded event/player concurrency, and stops checking an event's classes after it finds the player. A feature that loads a full player history must page deliberately rather than assuming that the first response contains every event. Long analyses should expose partial results as they arrive.
 
 Do not add mutations, authentication, API secrets, a proxy or a database without an explicit product and architecture decision. If CORS or API availability changes, update [`docs/constraints.md`](./constraints.md) and record any consequential architecture change in [`docs/decisions/`](./decisions/).
