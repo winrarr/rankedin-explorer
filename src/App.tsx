@@ -835,7 +835,11 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
   const firstVisibleDivision = Math.min(...activeDivisionIndices)
   const lastVisibleDivision = Math.max(...activeDivisionIndices)
   const visibleDivisions = leagueDivisionScale.slice(firstVisibleDivision, lastVisibleDivision + 1)
-  const divisionHeight = visibleDivisions.length === 1 ? 94 : 60
+  const maxTeamCount = Math.max(
+    ...seasons.map((season) => season.teamCount ?? Math.max(...season.standingHistory.map((point) => point.teamCount), 1)),
+    1,
+  )
+  const divisionHeight = Math.max(160, maxTeamCount * 28)
   const chartHeight = chartTop + visibleDivisions.length * divisionHeight + chartBottom
   const divisionTop = (divisionName: string) => chartTop + (leagueDivisionIndex(divisionName) - firstVisibleDivision) * divisionHeight
   const divisionCenter = (divisionName: string) => divisionTop(divisionName) + divisionHeight / 2
@@ -848,14 +852,19 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
   const orderedSeasons = [...seasons].sort((first, second) => dateTimestamp(first.startDate) - dateTimestamp(second.startDate))
   const seasonGap = Math.min(28, Math.max(16, scale.plotWidth * .04))
   const seasonWidth = (scale.plotWidth - seasonGap * Math.max(orderedSeasons.length - 1, 0)) / Math.max(orderedSeasons.length, 1)
-  const seasonSlots = orderedSeasons.map((season, seasonIndex) => ({
-    season,
-    x: scale.chartLeft + seasonIndex * (seasonWidth + seasonGap),
-    width: seasonWidth,
-  }))
+  const seasonSlots = orderedSeasons.map((season, seasonIndex) => {
+    const points = [...season.standingHistory].sort((first, second) => dateTimestamp(first.date) - dateTimestamp(second.date))
+    return {
+      season,
+      startDate: points[0]?.date ?? season.startDate,
+      endDate: points.at(-1)?.date ?? season.endDate,
+      x: scale.chartLeft + seasonIndex * (seasonWidth + seasonGap),
+      width: seasonWidth,
+    }
+  })
   const seasonXPosition = (slot: typeof seasonSlots[number], value: string) => {
-    const start = dateTimestamp(slot.season.startDate)
-    const end = dateTimestamp(slot.season.endDate)
+    const start = dateTimestamp(slot.startDate)
+    const end = dateTimestamp(slot.endDate)
     const duration = Math.max(end - start, 1)
     const progress = Math.min(1, Math.max(0, (dateTimestamp(value) - start) / duration))
     return slot.x + progress * slot.width
@@ -877,9 +886,10 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
       x: seasonXPosition(slot, season.endDate),
       y: standingPosition(season.divisionName, finalStanding, finalTeamCount),
     }
+    const finalPositionChanged = finalStanding !== null && finalSnapshot?.standing !== finalStanding
     const firstPoint = points[0] ?? finalPoint ?? { x: slot.x, y: divisionCenter(season.divisionName) }
     const lastPoint = points.at(-1) ?? finalPoint ?? { x: slot.x + slot.width, y: divisionCenter(season.divisionName) }
-    const endPoint = finalPoint ?? lastPoint
+    const endPoint = finalPositionChanged && finalPoint ? finalPoint : lastPoint
     return {
       season,
       slot,
@@ -891,7 +901,7 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
       endPoint,
       finalStanding,
       finalTeamCount,
-      finalPositionChanged: finalStanding !== null && finalSnapshot?.standing !== finalStanding,
+      finalPositionChanged,
     }
   })
   const divisionTeamCounts = new Map<number, number>()
@@ -910,7 +920,6 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
           <g key={division}>
             <rect className={`league-division-band${index % 2 ? ' is-alt' : ''}`} x={scale.chartLeft} y={top} width={scale.plotWidth} height={divisionHeight} />
             <line className="league-division-boundary" x1={scale.chartLeft} x2={scale.chartWidth - scale.chartRight} y1={top} y2={top} />
-            <line className="league-grid-line" x1={scale.chartLeft} x2={scale.chartWidth - scale.chartRight} y1={center} y2={center} />
             <text className="league-axis-label" x={scale.chartLeft - 12} y={center + 3} textAnchor="end">{division}</text>
           </g>
         )
@@ -922,11 +931,19 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
       <line className="league-axis-line" x1={scale.chartLeft} x2={scale.chartLeft} y1={chartTop} y2={chartHeight - chartBottom} />
       <line className="league-axis-line" x1={scale.chartLeft} x2={scale.chartWidth - scale.chartRight} y1={chartHeight - chartBottom} y2={chartHeight - chartBottom} />
       {[...divisionTeamCounts.entries()].map(([divisionIndex, teamCount]) => {
-        const top = chartTop + (divisionIndex - firstVisibleDivision) * divisionHeight
+        const division = leagueDivisionScale[divisionIndex]
         return (
           <g className="league-rank-guide" key={divisionIndex}>
-            <text x={scale.chartLeft + 8} y={top + rankInset + 3}>1st</text>
-            <text x={scale.chartLeft + 8} y={top + divisionHeight - rankInset + 3}>{ordinalPosition(teamCount)}</text>
+            {Array.from({ length: teamCount }, (_, index) => {
+              const standing = index + 1
+              const y = standingPosition(division, standing, teamCount)
+              return (
+                <g key={standing}>
+                  <line className="league-rank-grid" x1={scale.chartLeft} x2={scale.chartWidth - scale.chartRight} y1={y} y2={y} />
+                  <text x={scale.chartLeft + 8} y={y + 3}>{ordinalPosition(standing)}</text>
+                </g>
+              )
+            })}
           </g>
         )
       })}
@@ -939,10 +956,6 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
         return (
           <g key={season.id}>
             <line className="league-season-rail" x1={slot.x} x2={slot.x + slot.width} y1={divisionCenter(season.divisionName)} y2={divisionCenter(season.divisionName)} stroke={color} />
-            {finalStanding !== null && <>
-              <line className="league-rank-edge" x1={slot.x} x2={slot.x + slot.width} y1={standingPosition(season.divisionName, 1, finalTeamCount)} y2={standingPosition(season.divisionName, 1, finalTeamCount)} />
-              <line className="league-rank-edge" x1={slot.x} x2={slot.x + slot.width} y1={standingPosition(season.divisionName, finalTeamCount, finalTeamCount)} y2={standingPosition(season.divisionName, finalTeamCount, finalTeamCount)} />
-            </>}
             {points.length > 1 && <polyline className="league-standing-line" points={linePoints} stroke={color} />}
             {finalPoint && <>
               <circle className="league-season-end-point" cx={finalPoint.x} cy={finalPoint.y} r="5" fill={color} />
@@ -994,7 +1007,7 @@ function LeagueProgressChart({ seasons }: LeagueProgressChartProps) {
       <div className="league-chart-subheading"><strong>Division and table position</strong><span>Seasons are shown in order; off-season gaps are compressed.</span></div>
       <LeagueCombinedChart seasons={seasons} scale={scale} />
       <div className="league-chart-legend">
-        <span><i className="league-legend-rail" /> Season range</span>
+        <span><i className="league-legend-rail" /> Season fixture span</span>
         <span><i className="league-legend-step" /> Division change</span>
         <span><i className="league-result-marker league-result-marker-win">W</i> Win</span>
         <span><i className="league-result-marker league-result-marker-loss">L</i> Loss</span>
