@@ -19,10 +19,10 @@ npm run dev
 Useful checks:
 
 ```bash
-npm run lint
-npm run test
-npm run build
+npm run check
 ```
+
+The API contract and the current read paths are summarized in [`docs/rankedin-api.md`](./docs/rankedin-api.md), with the [Rankedin Swagger document](https://api.rankedin.com/swagger/v1/swagger.json) as the authoritative schema.
 
 ## Data and privacy
 

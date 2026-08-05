@@ -56,6 +56,26 @@ These stories define the current product direction. The MVP is intentionally foc
 41. As a user, I want to inspect the event points behind a ranking.
 42. As a user, I want to discover active players by club, region or sport.
 
+## Single-player progress view — discovery
+
+These stories describe the proposed next feature. They are intentionally separate from the current MVP until the data density and visual treatment are validated.
+
+P1. As a player, I want to paste my Rankedin profile URL or ID so that I can start from my own history.
+P2. As a player, I want to see my finished tournament placements on a time-based view so that I can understand change over time.
+P3. As a player, I want each normalized level and class combination to have its own visual series so that moving between DPF25 and DPF35 is visible.
+P4. As a player, I want the vertical scale to explain that a lower placement percentage is better so that the chart is not misleading.
+P5. As a player, I want each point to show the exact date, event, raw class name, placement and field size so that I can verify the story behind the graph.
+P6. As a player, I want to filter the chart to one or more class series so that sparse or irrelevant history does not overwhelm the view.
+P7. As a player, I want a summary for each series with result count, average, median, best and latest finish so that I can scan the signal without reading every point.
+P8. As a player, I want gaps and single-result classes to remain visible as sparse data so that the tool does not imply a trend that does not exist.
+P9. As a player, I want incomplete events and unavailable placements called out separately so that missing data is not treated as a poor result.
+P10. As a player, I want to limit the date range or number of recent results so that I can focus on current form or long-term history.
+P11. As a player, I want to see recurring partners alongside the points so that I can distinguish individual progress from pair changes.
+P12. As a player, I want to open the source Rankedin event from a chart point so that I can inspect the original draw and matches.
+P13. As a player, I want the view to work without saving my profile or history in a database so that it remains a small private utility.
+P14. As a player, I want a clear empty state when my profile cannot be found or has too little history to chart so that I know what to do next.
+P15. As a player, I want class labels normalized for grouping while retaining the raw label in details so that tournament-specific suffixes do not create fake series.
+
 ## Personal utility
 
 43. As a user, I want to share a comparison or report through a URL.
