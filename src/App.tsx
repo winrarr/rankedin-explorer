@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   ArrowUpRight,
@@ -119,6 +119,16 @@ function formatRating(value: number | null) {
   return value === null ? '—' : value.toFixed(2)
 }
 
+function formatCompactDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Unknown date'
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'numeric',
+    year: 'numeric',
+  }).format(date)
+}
+
 function pairRating(pair: PairRecord) {
   const ratings = [pair.first.rating, pair.second.rating].filter(
     (rating): rating is number => rating !== null,
@@ -142,6 +152,23 @@ function placementPosition(event: PlayerEventAnalysis) {
     return `${event.standing}–${event.standingRangeTo}`
   }
   return String(event.standing)
+}
+
+function ordinalPosition(value: number | null) {
+  if (value === null) return '—'
+  const remainder = value % 100
+  const suffix = remainder >= 11 && remainder <= 13
+    ? 'th'
+    : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[value % 10] ?? 'th'
+  return `${value}${suffix}`
+}
+
+function placementSummaryPosition(event: PlayerEventAnalysis) {
+  if (event.standing === null) return '—'
+  if (event.standingRangeTo && event.standingRangeTo !== event.standing) {
+    return `${ordinalPosition(event.standing)}–${ordinalPosition(event.standingRangeTo)}`
+  }
+  return ordinalPosition(event.standing)
 }
 
 function placementField(event: PlayerEventAnalysis) {
@@ -170,6 +197,11 @@ function compactClassName(className: string | null) {
 
 function fieldPlacementEvents(analysis: PlayerAnalysis | null) {
   return analysis?.events.filter((event) => event.className).slice(0, 5) ?? []
+}
+
+function fieldPlacementSummary(event: PlayerEventAnalysis) {
+  const fieldSize = event.fieldSize ? ` of ${event.fieldSize} pairs` : ''
+  return `${formatCompactDate(event.startDate)} ${compactClassName(event.className)} ${placementSummaryPosition(event)}${fieldSize}`
 }
 
 function matchRecord(matches: PlayerEventAnalysis['matches']) {
@@ -362,6 +394,7 @@ function App() {
   const [fieldPlacementsLoaded, setFieldPlacementsLoaded] = useState(false)
   const [isLoadingFieldPlacements, setIsLoadingFieldPlacements] = useState(false)
   const [fieldPlacementError, setFieldPlacementError] = useState<string | null>(null)
+  const fieldPlacementRequestRef = useRef(0)
   const [error, setError] = useState<string | null>(null)
   const [showPreferences, setShowPreferences] = useState(false)
 
@@ -369,6 +402,10 @@ function App() {
     savePreferences(preferences)
     document.documentElement.dataset.theme = preferences.theme
   }, [preferences])
+
+  useEffect(() => {
+    void loadFieldPlacements(snapshot.participants)
+  }, [snapshot.participants, snapshot.selectedClass.id])
 
   const visibleParticipants = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -390,6 +427,7 @@ function App() {
   const classTitle = snapshot.selectedClass.name.replace(/\s*\([^)]*\)/, '')
 
   async function analyzeTournament() {
+    fieldPlacementRequestRef.current += 1
     setIsAnalyzing(true)
     setError(null)
     setSelectedPairId(null)
@@ -397,6 +435,7 @@ function App() {
     setFieldPlacementSummaries({})
     setFieldPlacementsLoaded(false)
     setFieldPlacementError(null)
+    setIsLoadingFieldPlacements(false)
 
     try {
       const result = await getTournamentSnapshot(tournamentUrl)
@@ -414,6 +453,7 @@ function App() {
     if (!nextClass || nextClass.id === snapshot.selectedClass.id) return
 
     setIsLoadingClass(true)
+    fieldPlacementRequestRef.current += 1
     setError(null)
 
     try {
@@ -424,6 +464,7 @@ function App() {
       setFieldPlacementSummaries({})
       setFieldPlacementsLoaded(false)
       setFieldPlacementError(null)
+      setIsLoadingFieldPlacements(false)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'This class could not be loaded.')
     } finally {
@@ -453,8 +494,10 @@ function App() {
     setIsLoadingPair(false)
   }
 
-  async function loadFieldPlacements() {
-    const players = snapshot.participants.flatMap((pair) => [pair.first, pair.second])
+  async function loadFieldPlacements(participants: PairRecord[]) {
+    const requestId = fieldPlacementRequestRef.current + 1
+    fieldPlacementRequestRef.current = requestId
+    const players = participants.flatMap((pair) => [pair.first, pair.second])
     setIsLoadingFieldPlacements(true)
     setFieldPlacementError(null)
 
@@ -475,6 +518,8 @@ function App() {
       failedCount += 1
     })
 
+    if (requestId !== fieldPlacementRequestRef.current) return
+
     setFieldPlacementSummaries(summaries)
     setFieldPlacementsLoaded(true)
     if (failedCount) {
@@ -484,6 +529,7 @@ function App() {
   }
 
   function resetToPreview() {
+    fieldPlacementRequestRef.current += 1
     setSnapshot(demoSnapshot)
     setTournamentUrl(DEFAULT_TOURNAMENT_URL)
     setSelectedPairId(null)
@@ -491,6 +537,7 @@ function App() {
     setFieldPlacementSummaries({})
     setFieldPlacementsLoaded(false)
     setFieldPlacementError(null)
+    setIsLoadingFieldPlacements(false)
     setSearchTerm('')
     setError(null)
   }
@@ -666,19 +713,10 @@ function App() {
                 <p>{snapshot.selectedClass.name.includes('(') ? snapshot.selectedClass.name.match(/\(([^)]+)\)/)?.[1] : 'Selected class'} <span className="muted-divider">/</span> {snapshot.participants.length} pairs visible</p>
               </div>
               <div className="field-card-tools">
-                <button
-                  className="text-button placement-load-button"
-                  type="button"
-                  onClick={() => void loadFieldPlacements()}
-                  disabled={isLoadingFieldPlacements || !snapshot.participants.length}
-                >
+                <div className="placement-load-status" aria-live="polite">
                   {isLoadingFieldPlacements ? <LoaderCircle className="spin" size={14} /> : <History size={14} />}
-                  {isLoadingFieldPlacements
-                    ? 'Reading placements…'
-                    : fieldPlacementsLoaded
-                      ? 'Refresh last 5 placements'
-                      : 'Load last 5 placements'}
-                </button>
+                  {isLoadingFieldPlacements ? 'Reading latest 5 per player…' : fieldPlacementsLoaded ? 'Latest 5 per player' : 'Placement summary unavailable'}
+                </div>
                 <div className="class-picker-wrap">
                   <select value={snapshot.selectedClass.id} onChange={(event) => void chooseClass(Number(event.target.value))} disabled={isLoadingClass || isLoadingFieldPlacements} aria-label="Choose tournament class">
                     {snapshot.classes.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
@@ -696,7 +734,7 @@ function App() {
 
             <div className="table-scroll">
               <table className="roster-table">
-                <thead><tr><th>PAIR</th><th>LAST 5 PLACEMENTS</th><th>SKILL</th><th>RANK</th><th>FIELD SIGNAL</th><th aria-label="Actions" /></tr></thead>
+                <thead><tr><th>PAIR</th><th>LAST 5 / PLAYER</th><th>SKILL</th><th>RANK</th><th>FIELD SIGNAL</th><th aria-label="Actions" /></tr></thead>
                 <tbody>
                   {visibleParticipants.map((pair, index) => {
                     const rating = pairRating(pair)
@@ -727,7 +765,7 @@ function App() {
                                         key={`${player.id}-${event.id}`}
                                         title={`${event.name} · ${event.className ?? 'Class unavailable'}`}
                                       >
-                                        {compactClassName(event.className)} {placementPosition(event)}/{event.fieldSize ?? '—'}
+                                        {fieldPlacementSummary(event)}
                                       </span>
                                     ))}
                                   </span>
