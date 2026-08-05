@@ -249,56 +249,132 @@ type RawMatchesResponse = {
 }
 
 const responseCache = new Map<string, Promise<unknown>>()
-const requestQueue: Array<() => void> = []
-const MAX_ACTIVE_REQUESTS = 12
+const eventAnalysisCache = new Map<string, Promise<PlayerEventAnalysis>>()
+type QueuedRequest = {
+  cancelled: boolean
+  run: () => void
+}
+
+const requestQueue: QueuedRequest[] = []
+const MAX_ACTIVE_REQUESTS = 15
 const MAX_EVENT_ANALYSIS_CONCURRENCY = MAX_ACTIVE_REQUESTS
+const MAX_RETRY_ATTEMPTS = 3
 let activeRequestCount = 0
 
 function drainRequestQueue() {
   while (activeRequestCount < MAX_ACTIVE_REQUESTS && requestQueue.length) {
     const nextRequest = requestQueue.shift()
     if (!nextRequest) return
+    if (nextRequest.cancelled) continue
     activeRequestCount += 1
-    nextRequest()
+    nextRequest.run()
   }
 }
 
-function enqueueRequest<T>(task: () => Promise<T>) {
+function abortError() {
+  const error = new Error('Request aborted.')
+  error.name = 'AbortError'
+  return error
+}
+
+function waitForRetry(delay: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError())
+      return
+    }
+
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener('abort', cancel)
+      resolve()
+    }, delay)
+    function cancel() {
+      clearTimeout(timeout)
+      signal?.removeEventListener('abort', cancel)
+      reject(abortError())
+    }
+    signal?.addEventListener('abort', cancel, { once: true })
+  })
+}
+
+function retryDelay(response: Response, attempt: number) {
+  const retryAfter = response.headers.get('Retry-After')
+  if (retryAfter) {
+    const seconds = Number(retryAfter)
+    if (Number.isFinite(seconds)) return Math.min(5000, Math.max(250, seconds * 1000))
+    const timestamp = Date.parse(retryAfter)
+    if (!Number.isNaN(timestamp)) return Math.min(5000, Math.max(250, timestamp - Date.now()))
+  }
+  return Math.min(5000, 500 * (2 ** attempt))
+}
+
+async function fetchJson(path: string, signal?: AbortSignal) {
+  for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt += 1) {
+    if (signal?.aborted) throw abortError()
+
+    const timeoutSignal = AbortSignal.timeout(12000)
+    const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
+    const response = await fetch(`${API_BASE}${path}`, { signal: requestSignal })
+    if (response.ok) return response.json()
+
+    const canRetry = response.status === 429 || response.status === 503
+    if (!canRetry || attempt === MAX_RETRY_ATTEMPTS - 1) {
+      throw new Error(`Rankedin returned ${response.status} for ${path}`)
+    }
+    await waitForRetry(retryDelay(response, attempt), signal)
+  }
+
+  throw new Error(`Rankedin request failed for ${path}`)
+}
+
+function enqueueRequest<T>(task: () => Promise<T>, signal?: AbortSignal) {
   return new Promise<T>((resolve, reject) => {
-    requestQueue.push(async () => {
-      try {
-        resolve(await task())
-      } catch (error) {
-        reject(error)
-      } finally {
-        activeRequestCount -= 1
-        drainRequestQueue()
-      }
-    })
+    let started = false
+    const queuedRequest: QueuedRequest = {
+      cancelled: false,
+      run: async () => {
+        started = true
+        signal?.removeEventListener('abort', cancel)
+        try {
+          if (signal?.aborted) throw abortError()
+          resolve(await task())
+        } catch (error) {
+          reject(error)
+        } finally {
+          activeRequestCount -= 1
+          drainRequestQueue()
+        }
+      },
+    }
+    function cancel() {
+      if (started) return
+      queuedRequest.cancelled = true
+      reject(abortError())
+      drainRequestQueue()
+    }
+
+    if (signal?.aborted) {
+      reject(abortError())
+      return
+    }
+    signal?.addEventListener('abort', cancel, { once: true })
+    requestQueue.push(queuedRequest)
     drainRequestQueue()
   })
 }
 
-async function request<T>(path: string): Promise<T> {
-  const cached = responseCache.get(path)
+async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const cacheable = !signal
+  const cached = cacheable ? responseCache.get(path) : undefined
   if (cached) return cached as Promise<T>
 
-  const pending = enqueueRequest(async () => {
-    const response = await fetch(`${API_BASE}${path}`, {
-      signal: AbortSignal.timeout(12000),
-    })
-    if (!response.ok) {
-      throw new Error(`Rankedin returned ${response.status} for ${path}`)
-    }
-
-    return response.json()
-  })
-  responseCache.set(path, pending)
+  const pending = enqueueRequest(() => fetchJson(path, signal), signal)
+  if (cacheable) responseCache.set(path, pending)
 
   try {
     return await pending as T
   } catch (error) {
-    responseCache.delete(path)
+    if (cacheable) responseCache.delete(path)
     throw error
   }
 }
@@ -343,6 +419,7 @@ async function findPlayerClassResult(
 ): Promise<PlayerClassResult | null> {
   let nextIndex = 0
   let match: PlayerClassResult | null = null
+  const controller = new AbortController()
 
   async function worker() {
     while (!match) {
@@ -359,12 +436,14 @@ async function findPlayerClassResult(
             rankingId,
             language: 'en',
           })}`,
+          controller.signal,
         )
         const playerResult = result.Data.find(
           (item) => item.Player1ParticipantId === playerId || item.Player2ParticipantId === playerId,
         )
         if (playerResult) {
           match = { classOption, result, playerResult }
+          controller.abort()
           return
         }
       } catch {
@@ -676,6 +755,16 @@ async function analyzeEvent(event: RawEvent, playerId: number): Promise<PlayerEv
   }
 }
 
+function cachedEventAnalysis(event: RawEvent, playerId: number) {
+  const cacheKey = `${playerId}:${event.Id}`
+  const cached = eventAnalysisCache.get(cacheKey)
+  if (cached) return cached
+
+  const pending = analyzeEvent(event, playerId)
+  eventAnalysisCache.set(cacheKey, pending)
+  return pending
+}
+
 export async function getPlayerAnalysis(
   playerId: number,
   maxEvents = 10,
@@ -686,17 +775,24 @@ export async function getPlayerAnalysis(
       PlayerId: playerId,
       Language: 'en',
       Skip: 0,
-      Take: Math.max(maxEvents * 3, 30),
+      Take: Math.max(maxEvents + 5, 30),
     })}`,
   )
   const finishedEvents = response.Payload
     .filter((event) => event.State === FINISHED_EVENT_STATE && event.Type === 4)
     .slice(0, maxEvents)
-  const events = await mapWithConcurrency(finishedEvents, MAX_EVENT_ANALYSIS_CONCURRENCY, async (event) => {
-    const analysis = await analyzeEvent(event, playerId)
-    onEvent?.(analysis)
-    return analysis
-  })
+  const recentEvents = finishedEvents.slice(0, Math.min(10, maxEvents))
+  const olderEvents = finishedEvents.slice(recentEvents.length)
+  async function analyzeEvents(events: RawEvent[]) {
+    return mapWithConcurrency(events, MAX_EVENT_ANALYSIS_CONCURRENCY, async (event) => {
+      const analysis = await cachedEventAnalysis(event, playerId)
+      onEvent?.(analysis)
+      return analysis
+    })
+  }
 
-  return { playerId, playerName: 'Selected player', events }
+  const recentAnalyses = await analyzeEvents(recentEvents)
+  const olderAnalyses = await analyzeEvents(olderEvents)
+
+  return { playerId, playerName: 'Selected player', events: [...recentAnalyses, ...olderAnalyses] }
 }
