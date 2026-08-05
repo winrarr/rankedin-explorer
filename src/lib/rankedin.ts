@@ -15,6 +15,16 @@ export type PlayerSearchResult = {
   name: string
 }
 
+export type TournamentSearchResult = {
+  id: number
+  name: string
+  url: string
+  startDate: string
+  sport: string | null
+  countryFlag: string | null
+  isPremium: boolean | null
+}
+
 export type PlayerProfile = PlayerRecord & {
   countryCode: string | null
   homeClubName: string | null
@@ -100,6 +110,15 @@ type RawPlayerSearchResult = {
   Id: number
   Name: string
   RankedinId: string
+}
+
+type RawTournamentSearchResult = {
+  Url: string
+  Name: string
+  StartDate: string | null
+  Sport: string | null
+  CountryFlag: string | null
+  IsPremium: boolean | null
 }
 
 type RawParticipant = {
@@ -406,6 +425,32 @@ export function parseTournamentReference(value: string) {
   if (!match) throw new Error('Paste a Rankedin tournament URL or numeric tournament ID.')
 
   return { tournamentId: Number(match[1]) }
+}
+
+export async function searchTournamentsByName(term: string, take = 8): Promise<TournamentSearchResult[]> {
+  const normalizedTerm = term.trim()
+  if (!normalizedTerm) return []
+
+  const response = await request<RawTournamentSearchResult[]>(
+    `/Search/GetTournamentsAsync${query({ term: normalizedTerm, language: 'en', take, skip: 0 })}`,
+  )
+
+  return response.flatMap((tournament) => {
+    try {
+      const { tournamentId } = parseTournamentReference(tournament.Url)
+      return [{
+        id: tournamentId,
+        name: tournament.Name,
+        url: tournament.Url,
+        startDate: tournament.StartDate ?? '',
+        sport: tournament.Sport,
+        countryFlag: tournament.CountryFlag,
+        isPremium: tournament.IsPremium,
+      }]
+    } catch {
+      return []
+    }
+  })
 }
 
 export function parsePlayerReference(value: string) {

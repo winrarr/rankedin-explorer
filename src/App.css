@@ -158,6 +158,12 @@ h1 em { color: var(--coral); font-style: normal; }
 .player-search-result:hover { border-color: var(--blue); background: var(--blue-soft); }
 .player-search-result-name { overflow: hidden; max-width: 100%; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 760; }
 .player-search-result-id { color: var(--muted); font-size: 9px; }
+.tournament-search-panel { margin-top: 10px; }
+.tournament-search-results { display: grid; gap: 6px; }
+.tournament-search-result { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 9px 10px; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; font: inherit; text-align: left; cursor: pointer; }
+.tournament-search-result:hover { border-color: var(--blue); background: var(--blue-soft); }
+.tournament-search-result-name { overflow: hidden; max-width: 100%; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 760; }
+.tournament-search-result-meta { color: var(--muted); font-size: 9px; }
 .share-button:disabled { color: var(--muted); cursor: not-allowed; opacity: .55; }
 .error-banner { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 12px; color: #914d3f; background: var(--coral-soft); border: 1px solid color-mix(in srgb, var(--coral) 40%, transparent); border-radius: 10px; font-size: 12px; }
 .error-banner.small { margin-top: 14px; font-size: 11px; }

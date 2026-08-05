@@ -30,6 +30,7 @@ import {
   getPlayerAnalysis,
   getPlayerProfile,
   searchPlayersByName,
+  searchTournamentsByName,
   getTournamentSnapshot,
   type MatchRecord,
   type PairRecord,
@@ -38,6 +39,7 @@ import {
   type PlayerProfile,
   type PlayerRecord,
   type PlayerSearchResult,
+  type TournamentSearchResult,
   type TournamentSnapshot,
 } from './lib/rankedin'
 import {
@@ -102,6 +104,11 @@ function updateSharedLocation({ mode, tournament, classId, player }: {
 
   const query = params.toString()
   window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`)
+}
+
+function isDirectTournamentReference(value: string) {
+  const trimmed = value.trim()
+  return /^\d{3,}$/.test(trimmed) || /\/tournament\/\d+/i.test(trimmed)
 }
 
 const demoParticipants: PairRecord[] = [
@@ -857,10 +864,15 @@ function App() {
   const [playerSearchResults, setPlayerSearchResults] = useState<PlayerSearchResult[]>([])
   const [isSearchingPlayers, setIsSearchingPlayers] = useState(false)
   const [playerSearchError, setPlayerSearchError] = useState<string | null>(null)
+  const [tournamentSearchResults, setTournamentSearchResults] = useState<TournamentSearchResult[]>([])
+  const [isSearchingTournaments, setIsSearchingTournaments] = useState(false)
+  const [tournamentSearchError, setTournamentSearchError] = useState<string | null>(null)
   const [shareCopied, setShareCopied] = useState(false)
   const fieldPlacementRequestRef = useRef(0)
   const playerRequestRef = useRef(0)
   const playerSearchRequestRef = useRef(0)
+  const tournamentSearchRequestRef = useRef(0)
+  const lastAnalyzedTournamentReferenceRef = useRef('')
   const [error, setError] = useState<string | null>(null)
   const [showPreferences, setShowPreferences] = useState(false)
 
@@ -877,6 +889,80 @@ function App() {
       void analyzePlayer(initialLocation.playerReference)
     }
   }, [initialLocation])
+
+  useEffect(() => {
+    const normalizedTerm = playerSearchTerm.trim()
+    const requestId = playerSearchRequestRef.current + 1
+    playerSearchRequestRef.current = requestId
+    setPlayerSearchResults([])
+    setPlayerSearchError(null)
+    setIsSearchingPlayers(false)
+
+    if (activeMode !== 'player' || !showPlayerSearch || normalizedTerm.length < 2) return
+
+    const timeout = window.setTimeout(() => {
+      setIsSearchingPlayers(true)
+      void searchPlayersByName(normalizedTerm)
+        .then((results) => {
+          if (requestId !== playerSearchRequestRef.current) return
+          setPlayerSearchResults(results)
+        })
+        .catch((caught) => {
+          if (requestId !== playerSearchRequestRef.current) return
+          setPlayerSearchError(caught instanceof Error ? caught.message : 'Player search could not be completed.')
+        })
+        .finally(() => {
+          if (requestId === playerSearchRequestRef.current) setIsSearchingPlayers(false)
+        })
+    }, 280)
+
+    return () => window.clearTimeout(timeout)
+  }, [activeMode, playerSearchTerm, showPlayerSearch])
+
+  useEffect(() => {
+    const normalizedTerm = tournamentUrl.trim()
+    const requestId = tournamentSearchRequestRef.current + 1
+    tournamentSearchRequestRef.current = requestId
+    setTournamentSearchResults([])
+    setTournamentSearchError(null)
+    setIsSearchingTournaments(false)
+
+    if (activeMode !== 'tournament' || isDirectTournamentReference(normalizedTerm) || normalizedTerm.length < 2) return
+
+    const timeout = window.setTimeout(() => {
+      setIsSearchingTournaments(true)
+      void searchTournamentsByName(normalizedTerm)
+        .then((results) => {
+          if (requestId !== tournamentSearchRequestRef.current) return
+          setTournamentSearchResults(results)
+        })
+        .catch((caught) => {
+          if (requestId !== tournamentSearchRequestRef.current) return
+          setTournamentSearchError(caught instanceof Error ? caught.message : 'Tournament search could not be completed.')
+        })
+        .finally(() => {
+          if (requestId === tournamentSearchRequestRef.current) setIsSearchingTournaments(false)
+        })
+    }, 280)
+
+    return () => window.clearTimeout(timeout)
+  }, [activeMode, tournamentUrl])
+
+  useEffect(() => {
+    const normalizedReference = tournamentUrl.trim()
+    if (activeMode !== 'tournament' || !isDirectTournamentReference(normalizedReference)) {
+      lastAnalyzedTournamentReferenceRef.current = ''
+      return
+    }
+    if (normalizedReference === lastAnalyzedTournamentReferenceRef.current) return
+
+    const timeout = window.setTimeout(() => {
+      if (normalizedReference === lastAnalyzedTournamentReferenceRef.current) return
+      void analyzeTournament(normalizedReference)
+    }, 550)
+
+    return () => window.clearTimeout(timeout)
+  }, [activeMode, tournamentUrl])
 
   useEffect(() => {
     if (activeMode !== 'tournament' || snapshot.source !== 'live') return
@@ -910,6 +996,7 @@ function App() {
     const normalizedReference = reference.trim()
     if (!normalizedReference) return
 
+    lastAnalyzedTournamentReferenceRef.current = normalizedReference
     fieldPlacementRequestRef.current += 1
     setIsAnalyzing(true)
     setError(null)
@@ -982,34 +1069,19 @@ function App() {
     }
   }
 
-  async function searchPlayers() {
-    const normalizedTerm = playerSearchTerm.trim()
-    if (!normalizedTerm) return
-
-    const requestId = playerSearchRequestRef.current + 1
-    playerSearchRequestRef.current = requestId
-    setIsSearchingPlayers(true)
-    setPlayerSearchError(null)
-    setPlayerSearchResults([])
-
-    try {
-      const results = await searchPlayersByName(normalizedTerm)
-      if (requestId !== playerSearchRequestRef.current) return
-      setPlayerSearchResults(results)
-    } catch (caught) {
-      if (requestId !== playerSearchRequestRef.current) return
-      setPlayerSearchError(caught instanceof Error ? caught.message : 'Player search could not be completed.')
-    } finally {
-      if (requestId === playerSearchRequestRef.current) setIsSearchingPlayers(false)
-    }
-  }
-
   function selectPlayerSearchResult(player: PlayerSearchResult) {
     setPlayerSearchTerm('')
     setPlayerSearchResults([])
     setPlayerSearchError(null)
     setShowPlayerSearch(false)
     void analyzePlayer(player.rankedInId)
+  }
+
+  function selectTournamentSearchResult(tournament: TournamentSearchResult) {
+    setTournamentSearchResults([])
+    setTournamentSearchError(null)
+    setTournamentUrl(String(tournament.id))
+    void analyzeTournament(String(tournament.id))
   }
 
   function togglePlayerSearch() {
@@ -1328,7 +1400,7 @@ function App() {
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') void (activeMode === 'tournament' ? analyzeTournament() : analyzePlayer())
                     }}
-                    placeholder={activeMode === 'tournament' ? 'Paste a Rankedin tournament URL or ID' : 'Paste a Rankedin profile URL or R-number'}
+                    placeholder={activeMode === 'tournament' ? 'Search tournament name, URL or ID' : 'Paste a Rankedin profile URL or R-number'}
                   />
                   {(activeMode === 'tournament' ? tournamentUrl : playerReference) && <button className="clear-input" type="button" aria-label={`Clear ${activeMode} reference`} onClick={clearReference}><X size={14} /></button>}
                 </div>
@@ -1337,6 +1409,23 @@ function App() {
                   {(activeMode === 'tournament' ? isAnalyzing : isAnalyzingPlayer) ? 'Reading…' : activeMode === 'tournament' ? 'Analyze field' : 'Read progress'}
                 </button>
               </div>
+              {activeMode === 'tournament' && !isDirectTournamentReference(tournamentUrl) && (
+                <div className="tournament-search-panel" role="status">
+                  {isSearchingTournaments && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching public Rankedin tournaments…</p>}
+                  {tournamentSearchError && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {tournamentSearchError}</p>}
+                  {!isSearchingTournaments && !tournamentSearchError && tournamentUrl.trim().length >= 2 && !tournamentSearchResults.length && <p className="player-search-status">No public tournaments matched that name.</p>}
+                  {!!tournamentSearchResults.length && (
+                    <div className="tournament-search-results" role="listbox" aria-label="Tournament search results">
+                      {tournamentSearchResults.map((tournament) => (
+                        <button className="tournament-search-result" type="button" role="option" key={`${tournament.id}-${tournament.startDate}`} onClick={() => selectTournamentSearchResult(tournament)}>
+                          <span className="tournament-search-result-name">{tournament.name}</span>
+                          <span className="tournament-search-result-meta">{tournament.startDate || 'Date unavailable'} · {tournament.sport ?? 'Sport unavailable'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {activeMode === 'player' && (
                 <div className="player-search">
                   <button className="player-search-toggle" type="button" aria-expanded={showPlayerSearch} onClick={togglePlayerSearch}>
@@ -1350,18 +1439,14 @@ function App() {
                           <input
                             value={playerSearchTerm}
                             onChange={(event) => setPlayerSearchTerm(event.target.value)}
-                            onKeyDown={(event) => { if (event.key === 'Enter') void searchPlayers() }}
                             placeholder="Search by player name"
                             aria-label="Search Rankedin players by name"
                           />
                         </div>
-                        <button className="primary-button" type="button" onClick={() => void searchPlayers()} disabled={isSearchingPlayers || !playerSearchTerm.trim()}>
-                          {isSearchingPlayers ? <LoaderCircle className="spin" size={15} /> : <Search size={15} />} Find players
-                        </button>
                       </div>
                       {isSearchingPlayers && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching public Rankedin profiles…</p>}
                       {playerSearchError && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {playerSearchError}</p>}
-                      {!isSearchingPlayers && !playerSearchError && playerSearchTerm.trim() && !playerSearchResults.length && <p className="player-search-status">No public players matched that name.</p>}
+                      {!isSearchingPlayers && !playerSearchError && playerSearchTerm.trim().length >= 2 && !playerSearchResults.length && <p className="player-search-status">No public players matched that name.</p>}
                       {!!playerSearchResults.length && (
                         <div className="player-search-results" role="listbox" aria-label="Player search results">
                           {playerSearchResults.map((player) => (
