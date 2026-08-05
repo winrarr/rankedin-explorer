@@ -199,11 +199,20 @@ function fieldPlacementEvents(analysis: PlayerAnalysis | null) {
   return analysis?.events.filter((event) => event.className).slice(0, 5) ?? []
 }
 
-function placementTone(event: PlayerEventAnalysis) {
-  if (event.standing === null) return 'placement-tone-neutral'
-  if (event.standing <= 2) return 'placement-tone-good'
-  if (event.fieldSize && event.standing > event.fieldSize / 2) return 'placement-tone-challenging'
-  return 'placement-tone-neutral'
+function placementProgress(event: PlayerEventAnalysis) {
+  if (event.standing === null || !event.fieldSize) return 0.5
+  if (event.fieldSize === 1) return 0
+  return Math.min(1, Math.max(0, (event.standing - 1) / (event.fieldSize - 1)))
+}
+
+function placementGradient(event: PlayerEventAnalysis) {
+  const lowerFinishWeight = Math.round(placementProgress(event) * 100)
+  const higherFinishWeight = 100 - lowerFinishWeight
+  return {
+    background: `color-mix(in srgb, var(--sage-soft) ${higherFinishWeight}%, var(--coral-soft) ${lowerFinishWeight}%)`,
+    borderColor: `color-mix(in srgb, var(--sage) ${higherFinishWeight}%, var(--coral) ${lowerFinishWeight}%)`,
+    color: `color-mix(in srgb, var(--sage) ${higherFinishWeight}%, var(--coral) ${lowerFinishWeight}%)`,
+  }
 }
 
 function fieldPlacementSummary(event: PlayerEventAnalysis) {
@@ -774,8 +783,9 @@ function App() {
                                       const placement = fieldPlacementSummary(event)
                                       return (
                                         <div
-                                          className={`field-placement-tag ${placementTone(event)}`}
+                                          className="field-placement-tag"
                                           key={`${player.id}-${event.id}`}
+                                          style={placementGradient(event)}
                                           title={`${event.name} · ${event.className ?? 'Class unavailable'}`}
                                         >
                                           <span className="field-placement-date">{placement.date}</span>
