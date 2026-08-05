@@ -991,7 +991,6 @@ function LeagueProgressChart({ seasons }: LeagueProgressChartProps) {
 
   return (
     <div className="league-chart-wrap">
-      <div className="league-chart-subheading"><strong>Division and table position</strong><span>Seasons are shown in order; off-season gaps are compressed.</span></div>
       <LeagueCombinedChart seasons={seasons} scale={scale} />
       <div className="league-chart-legend">
         <span><i className="league-result-marker league-result-marker-win">W</i> Win</span>
