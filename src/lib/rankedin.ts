@@ -49,6 +49,11 @@ export type MatchRecord = {
   score: string
 }
 
+export type MatchQuery = {
+  tournamentId: number
+  classId: number
+}
+
 export type PlayerEventAnalysis = {
   id: number
   name: string
@@ -56,10 +61,12 @@ export type PlayerEventAnalysis = {
   className: string | null
   standing: number | null
   standingRangeTo: number | null
+  fieldSize: number | null
   ratingBegin: number | null
   ratingEnd: number | null
   rankingPoints: number | null
   partner: string | null
+  matchQuery: MatchQuery | null
   matches: MatchRecord[]
 }
 
@@ -117,6 +124,7 @@ type RawEvent = {
   Id: number
   Name: string
   State: number
+  Type?: number
   StartDate: string
 }
 
@@ -177,14 +185,29 @@ type RawMatchesResponse = {
   Matches: RawMatch[]
 }
 
+const responseCache = new Map<string, Promise<unknown>>()
+
 async function request<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`)
+  const cached = responseCache.get(path)
+  if (cached) return cached as Promise<T>
 
-  if (!response.ok) {
-    throw new Error(`Rankedin returned ${response.status} for ${path}`)
+  const pending = fetch(`${API_BASE}${path}`, {
+    signal: AbortSignal.timeout(12000),
+  }).then(async (response) => {
+    if (!response.ok) {
+      throw new Error(`Rankedin returned ${response.status} for ${path}`)
+    }
+
+    return response.json()
+  })
+  responseCache.set(path, pending)
+
+  try {
+    return await pending as T
+  } catch (error) {
+    responseCache.delete(path)
+    throw error
   }
-
-  return response.json() as Promise<T>
 }
 
 function query(params: Record<string, string | number | boolean | undefined>) {
@@ -195,6 +218,28 @@ function query(params: Record<string, string | number | boolean | undefined>) {
   })
 
   return `?${search.toString()}`
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  mapper: (item: T) => Promise<R>,
+) {
+  const results: R[] = []
+  let nextIndex = 0
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex
+      nextIndex += 1
+      results[currentIndex] = await mapper(items[currentIndex])
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => worker()),
+  )
+  return results
 }
 
 function normalizePlayer(player: RawPlayer): PlayerRecord {
@@ -339,7 +384,7 @@ function normalizeMatch(match: RawMatch, playerId: number): MatchRecord | null {
   }
 }
 
-async function getClassMatches(tournamentId: number, classId: number, playerId: number) {
+export async function getEventMatches(tournamentId: number, classId: number, playerId: number) {
   const draws = await request<RawClassDraw[]>(
     `/tournament/GetClassesAndDrawNamesAsync${query({ tournamentId })}`,
   )
@@ -385,10 +430,12 @@ async function analyzeEvent(event: RawEvent, playerId: number): Promise<PlayerEv
     className: null,
     standing: null,
     standingRangeTo: null,
+    fieldSize: null,
     ratingBegin: null,
     ratingEnd: null,
     rankingPoints: null,
     partner: null,
+    matchQuery: null,
     matches: [],
   } satisfies PlayerEventAnalysis
 
@@ -398,7 +445,7 @@ async function analyzeEvent(event: RawEvent, playerId: number): Promise<PlayerEv
     )
     const rankingId = standings.Rankings[0]?.Id
 
-    for (const classOption of standings.Classes) {
+    const classResults = await mapWithConcurrency(standings.Classes, 4, async (classOption) => {
       try {
         const result = await request<RawResultsResponse>(
           `/tournament/GetResultsAsync${query({
@@ -408,34 +455,38 @@ async function analyzeEvent(event: RawEvent, playerId: number): Promise<PlayerEv
             language: 'en',
           })}`,
         )
-        const playerResult = result.Data.find(
-          (item) => item.Player1ParticipantId === playerId || item.Player2ParticipantId === playerId,
-        )
-
-        if (!playerResult) continue
-
-        const playerIsFirst = playerResult.Player1ParticipantId === playerId
-        const matches = await getClassMatches(event.Id, classOption.Id, playerId)
-        return {
-          ...base,
-          className: classOption.Name,
-          standing: playerResult.Standing,
-          standingRangeTo: playerResult.StandingRangeTo || null,
-          ratingBegin: playerIsFirst ? playerResult.Player1RatingBegin : playerResult.Player2RatingBegin,
-          ratingEnd: playerIsFirst ? playerResult.Player1RatingEnd : playerResult.Player2RatingEnd,
-          rankingPoints: playerResult.RankingPoint?.Points ?? null,
-          partner: playerIsFirst ? playerResult.Player2Name : playerResult.Player1Name,
-          matches,
-        }
+        return { classOption, result }
       } catch {
-        continue
+        return null
       }
+    })
+    const matchingClass = classResults.find((item) =>
+      item?.result.Data.some(
+        (result) => result.Player1ParticipantId === playerId || result.Player2ParticipantId === playerId,
+      ),
+    )
+    const playerResult = matchingClass?.result.Data.find(
+      (item) => item.Player1ParticipantId === playerId || item.Player2ParticipantId === playerId,
+    )
+    if (!matchingClass || !playerResult) return base
+
+    const playerIsFirst = playerResult.Player1ParticipantId === playerId
+    return {
+      ...base,
+      className: matchingClass.classOption.Name,
+      standing: playerResult.Standing,
+      standingRangeTo: playerResult.StandingRangeTo || null,
+      fieldSize: matchingClass.result.Data.length || null,
+      ratingBegin: playerIsFirst ? playerResult.Player1RatingBegin : playerResult.Player2RatingBegin,
+      ratingEnd: playerIsFirst ? playerResult.Player1RatingEnd : playerResult.Player2RatingEnd,
+      rankingPoints: playerResult.RankingPoint?.Points ?? null,
+      partner: playerIsFirst ? playerResult.Player2Name : playerResult.Player1Name,
+      matchQuery: { tournamentId: event.Id, classId: matchingClass.classOption.Id },
+      matches: [],
     }
   } catch {
     return base
   }
-
-  return base
 }
 
 export async function getPlayerAnalysis(playerId: number, maxEvents = 10): Promise<PlayerAnalysis> {
@@ -447,13 +498,10 @@ export async function getPlayerAnalysis(playerId: number, maxEvents = 10): Promi
       Take: Math.max(maxEvents * 3, 30),
     })}`,
   )
-  const finishedEvents = response.Payload.filter((event) => event.State === FINISHED_EVENT_STATE).slice(
-    0,
-    maxEvents,
-  )
-  const events = await Promise.all(finishedEvents.map((event) => analyzeEvent(event, playerId)))
-  const firstMatch = events.flatMap((event) => event.matches)[0]
-  const playerName = firstMatch?.partner ? 'Selected player' : 'Selected player'
+  const finishedEvents = response.Payload
+    .filter((event) => event.State === FINISHED_EVENT_STATE && event.Type === 4)
+    .slice(0, maxEvents)
+  const events = await mapWithConcurrency(finishedEvents, 4, (event) => analyzeEvent(event, playerId))
 
-  return { playerId, playerName, events }
+  return { playerId, playerName: 'Selected player', events }
 }

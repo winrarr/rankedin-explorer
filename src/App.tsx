@@ -20,11 +20,15 @@ import {
   X,
 } from 'lucide-react'
 import {
+  getEventMatches,
   getClassParticipants,
   getPlayerAnalysis,
   getTournamentSnapshot,
+  type MatchRecord,
   type PairRecord,
   type PlayerAnalysis,
+  type PlayerEventAnalysis,
+  type PlayerRecord,
   type TournamentSnapshot,
 } from './lib/rankedin'
 import {
@@ -132,8 +136,186 @@ function initials(name: string) {
     .toUpperCase()
 }
 
-function playerIsSelected(pair: PairRecord, playerId: number | null) {
-  return pair.first.id === playerId || pair.second.id === playerId
+function placementPosition(event: PlayerEventAnalysis) {
+  if (event.standing === null) return '—'
+  if (event.standingRangeTo && event.standingRangeTo !== event.standing) {
+    return `${event.standing}–${event.standingRangeTo}`
+  }
+  return String(event.standing)
+}
+
+function placementField(event: PlayerEventAnalysis) {
+  return event.fieldSize ? `of ${event.fieldSize} pairs` : 'field size unavailable'
+}
+
+function matchRecord(matches: PlayerEventAnalysis['matches']) {
+  const wins = matches.filter((match) => match.won === true).length
+  const losses = matches.filter((match) => match.won === false).length
+  return { wins, losses }
+}
+
+type PlayerHistoryColumnProps = {
+  player: PlayerRecord
+  analysis: PlayerAnalysis | null
+  error: string | null
+  isLoading: boolean
+  showContext: boolean
+}
+
+function PlayerHistoryColumn({
+  player,
+  analysis,
+  error,
+  isLoading,
+  showContext,
+}: PlayerHistoryColumnProps) {
+  const [matchStates, setMatchStates] = useState<Record<number, {
+    matches: MatchRecord[] | null
+    error: string | null
+    isLoading: boolean
+  }>>({})
+  const events = analysis?.events ?? []
+  const matches = events.flatMap((event) => matchStates[event.id]?.matches ?? event.matches)
+  const record = matchRecord(matches)
+
+  useEffect(() => {
+    setMatchStates({})
+  }, [analysis?.playerId])
+
+  async function loadMatchDetails(event: PlayerEventAnalysis) {
+    if (!event.matchQuery || matchStates[event.id]?.isLoading || matchStates[event.id]?.matches) return
+
+    setMatchStates((current) => ({
+      ...current,
+      [event.id]: { matches: null, error: null, isLoading: true },
+    }))
+
+    try {
+      const eventMatches = await getEventMatches(
+        event.matchQuery.tournamentId,
+        event.matchQuery.classId,
+        player.id,
+      )
+      setMatchStates((current) => ({
+        ...current,
+        [event.id]: { matches: eventMatches, error: null, isLoading: false },
+      }))
+    } catch (caught) {
+      setMatchStates((current) => ({
+        ...current,
+        [event.id]: {
+          matches: null,
+          error: caught instanceof Error ? caught.message : 'Match details could not be loaded.',
+          isLoading: false,
+        },
+      }))
+    }
+  }
+
+  return (
+    <section className="player-history-column">
+      <div className="player-history-header">
+        <div className="avatar">{initials(player.name)}</div>
+        <div className="player-history-name">
+          <strong>{player.name}</strong>
+          <span>Rating at target event: {formatRating(player.rating)}</span>
+        </div>
+        <a
+          className="player-profile-link"
+          href={`https://www.rankedin.com${player.url}`}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`Open ${player.name} on Rankedin`}
+        >
+          <ArrowUpRight size={15} />
+        </a>
+      </div>
+
+      {isLoading && (
+        <div className="loading-state">
+          <LoaderCircle className="spin" size={19} /> Reading event history…
+        </div>
+      )}
+      {error && <div className="error-banner small" role="alert"><CircleHelp size={15} /> {error}</div>}
+
+      {!isLoading && analysis && (
+        <>
+          <div className="trace-metrics">
+            <div><strong>{events.filter((event) => event.className).length}</strong><span>events found</span></div>
+            <div><strong>{matches.length || '—'}</strong><span>matches loaded</span></div>
+            <div><strong>{matches.length ? `${record.wins}–${record.losses}` : '—'}</strong><span>loaded record</span></div>
+          </div>
+
+          <div className="placement-list">
+            <div className="placement-list-heading">
+              <span>FINISHED EVENTS</span>
+              <span>LAST {events.length}</span>
+            </div>
+            {events.map((event) => {
+              const eventMatches = matchStates[event.id]?.matches ?? event.matches
+              const eventMatchState = matchStates[event.id]
+              const eventRecord = matchRecord(eventMatches)
+              return (
+                <article className="placement-item" key={`${player.id}-${event.id}`}>
+                  <div className="placement-result">
+                    <strong>{placementPosition(event)}</strong>
+                    <span>{placementField(event)}</span>
+                  </div>
+                  <div className="placement-event">
+                    <div className="placement-event-title">
+                      <strong>{event.name}</strong>
+                      <span>{formatDate(event.startDate)}</span>
+                    </div>
+                    <span className="placement-class">{event.className ?? 'Class result not published'}</span>
+                    <span className="placement-partner">
+                      {event.partner ? `With ${event.partner}` : 'Partner unavailable'}
+                      {eventMatches.length ? ` · ${eventRecord.wins}–${eventRecord.losses} in matches` : ''}
+                    </span>
+                    {event.matchQuery ? (
+                      <details className="match-details" open={showContext}>
+                        <summary>
+                          <span>Explore match details</span>
+                          <span>{eventMatches.length ? `${eventMatches.length} ${eventMatches.length === 1 ? 'match' : 'matches'}` : 'load matches'}</span>
+                        </summary>
+                        {eventMatches.length > 0 ? (
+                          <div className="match-details-list">
+                            {eventMatches.map((match) => (
+                              <div className="match-detail-row" key={match.id}>
+                                <span className={`match-result ${match.won === true ? 'win' : match.won === false ? 'loss' : ''}`}>
+                                  {match.won === true ? 'W' : match.won === false ? 'L' : '—'}
+                                </span>
+                                <div className="match-detail-opponent">
+                                  <strong>{match.opponents.length ? `vs ${match.opponents.join(' + ')}` : 'Opponent unavailable'}</strong>
+                                  <span>{match.draw || match.className}</span>
+                                </div>
+                                <span className="match-detail-score">{match.score}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="match-loader">
+                            {eventMatchState?.error && <span className="match-load-error">{eventMatchState.error}</span>}
+                            {!eventMatchState?.error && <span>Match-by-match details are fetched only when requested.</span>}
+                            <button type="button" onClick={() => void loadMatchDetails(event)} disabled={eventMatchState?.isLoading}>
+                              {eventMatchState?.isLoading ? <LoaderCircle className="spin" size={13} /> : <Search size={13} />}
+                              {eventMatchState?.isLoading ? 'Loading…' : 'Load match details'}
+                            </button>
+                          </div>
+                        )}
+                      </details>
+                    ) : (
+                      <span className="placement-partner">No public match details</span>
+                    )}
+                  </div>
+                </article>
+              )
+            })}
+            {!events.length && <p className="empty-history">No finished events were found for this player.</p>}
+          </div>
+        </>
+      )}
+    </section>
+  )
 }
 
 function App() {
@@ -143,14 +325,16 @@ function App() {
   })
   const [tournamentUrl, setTournamentUrl] = useState(DEFAULT_TOURNAMENT_URL)
   const [snapshot, setSnapshot] = useState<TournamentSnapshot>(demoSnapshot)
-  const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null)
-  const [playerAnalysis, setPlayerAnalysis] = useState<PlayerAnalysis | null>(null)
+  const [selectedPairId, setSelectedPairId] = useState<string | null>(null)
+  const [pairHistory, setPairHistory] = useState<{
+    first: { analysis: PlayerAnalysis | null; error: string | null }
+    second: { analysis: PlayerAnalysis | null; error: string | null }
+  } | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isLoadingClass, setIsLoadingClass] = useState(false)
-  const [isLoadingPlayer, setIsLoadingPlayer] = useState(false)
+  const [isLoadingPair, setIsLoadingPair] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [playerError, setPlayerError] = useState<string | null>(null)
   const [showPreferences, setShowPreferences] = useState(false)
 
   useEffect(() => {
@@ -174,24 +358,14 @@ function App() {
     ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
     : null
   const ratingSpread = ratings.length > 1 ? Math.max(...ratings) - Math.min(...ratings) : null
-  const selectedPair = snapshot.participants.find((pair) =>
-    playerIsSelected(pair, selectedPlayerId),
-  )
-  const selectedPlayer = selectedPair
-    ? selectedPair.first.id === selectedPlayerId
-      ? selectedPair.first
-      : selectedPair.second
-    : null
-  const analyzedMatches = playerAnalysis?.events.flatMap((event) => event.matches) ?? []
-  const wins = analyzedMatches.filter((match) => match.won === true).length
-  const losses = analyzedMatches.filter((match) => match.won === false).length
+  const selectedPair = snapshot.participants.find((pair) => pair.id === selectedPairId)
   const classTitle = snapshot.selectedClass.name.replace(/\s*\([^)]*\)/, '')
 
   async function analyzeTournament() {
     setIsAnalyzing(true)
     setError(null)
-    setSelectedPlayerId(null)
-    setPlayerAnalysis(null)
+    setSelectedPairId(null)
+    setPairHistory(null)
 
     try {
       const result = await getTournamentSnapshot(tournamentUrl)
@@ -214,8 +388,8 @@ function App() {
     try {
       const participants = await getClassParticipants(snapshot.tournamentId, classId)
       setSnapshot((current) => ({ ...current, selectedClass: nextClass, participants, source: 'live' }))
-      setSelectedPlayerId(null)
-      setPlayerAnalysis(null)
+      setSelectedPairId(null)
+      setPairHistory(null)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'This class could not be loaded.')
     } finally {
@@ -223,31 +397,35 @@ function App() {
     }
   }
 
-  async function inspectPlayer(pair: PairRecord) {
-    const player = pair.first
-    setSelectedPlayerId(player.id)
-    setPlayerAnalysis(null)
-    setPlayerError(null)
-    setIsLoadingPlayer(true)
+  async function inspectPair(pair: PairRecord) {
+    setSelectedPairId(pair.id)
+    setPairHistory(null)
+    setIsLoadingPair(true)
 
-    try {
-      const result = await getPlayerAnalysis(player.id, preferences.historyLimit)
-      setPlayerAnalysis({ ...result, playerName: player.name })
-    } catch (caught) {
-      setPlayerError(caught instanceof Error ? caught.message : 'Player history could not be loaded.')
-    } finally {
-      setIsLoadingPlayer(false)
-    }
+    const results = await Promise.allSettled([
+      getPlayerAnalysis(pair.first.id, preferences.historyLimit),
+      getPlayerAnalysis(pair.second.id, preferences.historyLimit),
+    ])
+
+    const [firstResult, secondResult] = results
+    setPairHistory({
+      first: firstResult.status === 'fulfilled'
+        ? { analysis: { ...firstResult.value, playerName: pair.first.name }, error: null }
+        : { analysis: null, error: firstResult.reason instanceof Error ? firstResult.reason.message : 'Player history could not be loaded.' },
+      second: secondResult.status === 'fulfilled'
+        ? { analysis: { ...secondResult.value, playerName: pair.second.name }, error: null }
+        : { analysis: null, error: secondResult.reason instanceof Error ? secondResult.reason.message : 'Player history could not be loaded.' },
+    })
+    setIsLoadingPair(false)
   }
 
   function resetToPreview() {
     setSnapshot(demoSnapshot)
     setTournamentUrl(DEFAULT_TOURNAMENT_URL)
-    setSelectedPlayerId(null)
-    setPlayerAnalysis(null)
+    setSelectedPairId(null)
+    setPairHistory(null)
     setSearchTerm('')
     setError(null)
-    setPlayerError(null)
   }
 
   return (
@@ -317,14 +495,14 @@ function App() {
               </select>
             </label>
             <label className="preference-row preference-checkbox">
-              <span>Show match context</span>
+              <span>Open match details by default</span>
               <input
                 type="checkbox"
                 checked={preferences.showContext}
                 onChange={(event) => setPreferences((current) => ({ ...current, showContext: event.target.checked }))}
               />
             </label>
-            <p className="popover-note">Tournament and player choices are never stored.</p>
+            <p className="popover-note">Tournament and pair choices are never stored.</p>
           </div>
         )}
       </header>
@@ -439,19 +617,19 @@ function App() {
                 <tbody>
                   {visibleParticipants.map((pair, index) => {
                     const rating = pairRating(pair)
-                    const selected = playerIsSelected(pair, selectedPlayerId)
+                    const selected = pair.id === selectedPairId
                     return (
                       <tr className={selected ? 'selected-row' : ''} key={pair.id}>
                         <td>
-                          <div className="pair-cell">
+                          <button className="pair-cell pair-select-button" type="button" onClick={() => void inspectPair(pair)}>
                             <span className="pair-index">{String(index + 1).padStart(2, '0')}</span>
                             <div><strong>{pair.first.name}</strong><span>{pair.second.name}</span></div>
-                          </div>
+                          </button>
                         </td>
                         <td><span className="rating-value">{formatRating(rating)}</span><span className="rating-caption">avg. start</span></td>
                         <td>{pair.ranking === null ? <span className="empty-value">not published</span> : pair.ranking}</td>
                         <td><span className={`signal-pill ${rating !== null && rating >= (averageRating ?? 0) ? 'signal-pill-strong' : ''}`}>{rating !== null && rating >= (averageRating ?? 0) ? 'above field avg.' : 'field baseline'}</span></td>
-                        <td><button className="row-action" type="button" onClick={() => void inspectPlayer(pair)} aria-label={`Inspect ${pair.first.name}`}><ArrowUpRight size={16} /></button></td>
+                        <td><button className="row-action" type="button" onClick={() => void inspectPair(pair)} aria-label={`View history for ${pair.first.name} and ${pair.second.name}`}><ArrowUpRight size={16} /></button></td>
                       </tr>
                     )
                   })}
@@ -464,37 +642,40 @@ function App() {
 
           <aside className="history-card">
             <div className="card-heading card-heading-small">
-              <div><div className="section-kicker">PLAYER TRACE</div><h2>{selectedPlayer ? selectedPlayer.name : 'Find the level behind a name'}</h2></div>
-              {selectedPlayer && <button className="icon-button quiet" type="button" onClick={() => { setSelectedPlayerId(null); setPlayerAnalysis(null) }} aria-label="Close player trace"><X size={17} /></button>}
+              <div>
+                <div className="section-kicker">PAIR HISTORY</div>
+                <h2>{selectedPair ? `${selectedPair.first.name} + ${selectedPair.second.name}` : 'Compare a pair over time'}</h2>
+                {selectedPair && <p>Placements come first. Open a tournament when you want the match-by-match context.</p>}
+              </div>
+              {selectedPair && <button className="icon-button quiet" type="button" onClick={() => { setSelectedPairId(null); setPairHistory(null) }} aria-label="Close pair history"><X size={17} /></button>}
             </div>
 
-            {!selectedPlayer && (
+            {!selectedPair && (
               <div className="trace-empty">
                 <div className="trace-empty-icon"><History size={21} /></div>
-                <h3>Trace their last {preferences.historyLimit} finished events.</h3>
-                <p>Open a pair above to see the exact classes, placements, partners, opponents and scores that sit behind their record.</p>
+                <h3>See the last {preferences.historyLimit} finished events for both players.</h3>
+                <p>Choose a pair above to compare their classes, placements and field sizes. Match details stay one click away.</p>
                 <div className="trace-rule"><span /><span /><span /></div>
               </div>
             )}
 
-            {selectedPlayer && (
-              <>
-                <div className="player-profile-mini">
-                  <div className="avatar">{initials(selectedPlayer.name)}</div>
-                  <div><strong>{selectedPlayer.name}</strong><span>{selectedPair?.second.name}</span></div>
-                  <a href={`https://www.rankedin.com${selectedPlayer.url}`} target="_blank" rel="noreferrer" aria-label="Open Rankedin player profile"><ArrowUpRight size={15} /></a>
-                </div>
-                {isLoadingPlayer && <div className="loading-state"><LoaderCircle className="spin" size={19} /> Reading event history…</div>}
-                {playerError && <div className="error-banner small" role="alert"><CircleHelp size={15} /> {playerError}</div>}
-                {!isLoadingPlayer && playerAnalysis && (
-                  <>
-                    <div className="trace-metrics"><div><strong>{playerAnalysis.events.filter((event) => event.className).length}</strong><span>events found</span></div><div><strong>{analyzedMatches.length}</strong><span>matches</span></div><div><strong>{wins}–{losses}</strong><span>match record</span></div></div>
-                    <div className="history-list">
-                      {playerAnalysis.events.map((event) => <div className="history-item" key={event.id}><div className="history-date">{formatDate(event.startDate)}</div><div className="history-event"><strong>{event.className ?? 'Class result not published'}</strong><span>{event.name}</span>{event.className && <small>{event.standing ? `Finished ${event.standing}${event.standingRangeTo && event.standingRangeTo !== event.standing ? `–${event.standingRangeTo}` : ''}` : 'Placement unavailable'} {event.partner ? `· with ${event.partner}` : ''}</small>}{preferences.showContext && event.matches.length > 0 && <div className="match-context">{event.matches.slice(0, 3).map((match) => <div className="match-context-row" key={match.id}><span className={match.won === true ? 'match-result win' : match.won === false ? 'match-result loss' : 'match-result'}>{match.won === true ? 'W' : match.won === false ? 'L' : '—'}</span><span className="match-opponents">{match.opponents.join(' / ')}</span><span className="match-score">{match.score}</span></div>)}{event.matches.length > 3 && <span className="match-more">+ {event.matches.length - 3} more matches</span>}</div>}</div><div className="history-score">{event.matches.length ? `${event.matches.filter((match) => match.won).length}–${event.matches.filter((match) => match.won === false).length}` : '—'}</div></div>)}
-                    </div>
-                  </>
-                )}
-              </>
+            {selectedPair && (
+              <div className="pair-history-grid">
+                <PlayerHistoryColumn
+                  player={selectedPair.first}
+                  analysis={pairHistory?.first.analysis ?? null}
+                  error={pairHistory?.first.error ?? null}
+                  isLoading={isLoadingPair}
+                  showContext={preferences.showContext}
+                />
+                <PlayerHistoryColumn
+                  player={selectedPair.second}
+                  analysis={pairHistory?.second.analysis ?? null}
+                  error={pairHistory?.second.error ?? null}
+                  isLoading={isLoadingPair}
+                  showContext={preferences.showContext}
+                />
+              </div>
             )}
           </aside>
         </section>

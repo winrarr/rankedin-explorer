@@ -12,14 +12,17 @@ export const DEFAULT_PREFERENCES: Preferences = {
   theme: 'light',
   density: 'comfortable',
   historyLimit: 10,
-  showContext: true,
+  showContext: false,
 }
 
-const STORAGE_KEY = 'rankedin-explorer.preferences.v1'
+const STORAGE_KEY = 'rankedin-explorer.preferences.v2'
+const LEGACY_STORAGE_KEY = 'rankedin-explorer.preferences.v1'
 
 export function loadPreferences(): Preferences {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
+    const currentStored = localStorage.getItem(STORAGE_KEY)
+    const legacyStored = localStorage.getItem(LEGACY_STORAGE_KEY)
+    const stored = currentStored ?? legacyStored
     if (!stored) return DEFAULT_PREFERENCES
 
     const parsed = JSON.parse(stored) as Partial<Preferences>
@@ -27,7 +30,7 @@ export function loadPreferences(): Preferences {
       theme: parsed.theme === 'dark' ? 'dark' : 'light',
       density: parsed.density === 'compact' ? 'compact' : 'comfortable',
       historyLimit: parsed.historyLimit === 5 || parsed.historyLimit === 25 ? parsed.historyLimit : 10,
-      showContext: parsed.showContext !== false,
+      showContext: currentStored ? parsed.showContext === true : false,
     }
   } catch {
     return DEFAULT_PREFERENCES
