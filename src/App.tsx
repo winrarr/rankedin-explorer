@@ -220,7 +220,7 @@ function fieldPlacementSummary(event: PlayerEventAnalysis) {
     date: formatCompactDate(event.startDate),
     className: compactClassName(event.className),
     position: placementSummaryPosition(event),
-    fieldSize: event.fieldSize ? `of ${event.fieldSize} pairs` : null,
+    fieldSize: event.fieldSize,
   }
 }
 
@@ -791,7 +791,7 @@ function App() {
                                           <span className="field-placement-date">{placement.date}</span>
                                           <span className="field-placement-class">{placement.className}</span>
                                           <strong className="field-placement-result">{placement.position}</strong>
-                                          {placement.fieldSize && <span className="field-placement-field">{placement.fieldSize}</span>}
+                                          {placement.fieldSize && <span className="field-placement-field">of <strong>{placement.fieldSize}</strong> pairs</span>}
                                         </div>
                                       )
                                     })}
