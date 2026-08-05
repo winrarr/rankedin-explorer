@@ -32,6 +32,6 @@ The implementation and endpoint-specific raw types live in [`src/lib/rankedin.ts
 
 ## Request discipline
 
-Keep requests read-only, bounded and cache-friendly. The API client has a small in-memory response cache, a shared active-request limit, parallel player/event analysis, and stops checking an event's classes after it finds the player. A feature that loads a full player history must page deliberately rather than assuming that the first response contains every event. Long analyses should expose partial results as they arrive.
+Keep requests read-only, bounded and cache-friendly. The API client has a small in-memory response cache, a shared 12-request active limit, parallel player/event analysis, and stops checking an event's classes after it finds the player. A feature that loads a full player history must page deliberately rather than assuming that the first response contains every event. Long analyses should expose partial results as they arrive.
 
 Do not add mutations, authentication, API secrets, a proxy or a database without an explicit product and architecture decision. If CORS or API availability changes, update [`docs/constraints.md`](./constraints.md) and record any consequential architecture change in [`docs/decisions/`](./decisions/).

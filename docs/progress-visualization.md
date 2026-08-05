@@ -35,7 +35,7 @@ The current view uses a single-player timeline scatter plot with optional connec
 1. The x-axis is event date.
 2. The y-axis is finish percentage (`placement / field size`), with Top 0% at the top and Top 100% at the bottom. Label it as “finish percentage — lower is better”.
 3. Each normalized level/class combination gets a color and legend entry.
-4. Each finished placement is a point. Connect points only within the same series, and do not draw a line for a series with fewer than two points.
+4. Each finished placement is a point. Solid lines connect points only within the same series, and dotted lines show a least-squares linear direction for series with at least two dated points. A dotted line is a visual summary, not a forecast.
 5. Hover or tap reveals date, event, raw class label, placement, field size, partner and a link to the source event.
 6. Summary cards show count, average, median, best, latest and the recent direction for each selected series.
 7. Filters allow all classes, one class, a date range and a recent-result limit. The raw event list remains available below the chart for verification.

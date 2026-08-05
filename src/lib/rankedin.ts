@@ -251,6 +251,7 @@ type RawMatchesResponse = {
 const responseCache = new Map<string, Promise<unknown>>()
 const requestQueue: Array<() => void> = []
 const MAX_ACTIVE_REQUESTS = 12
+const MAX_EVENT_ANALYSIS_CONCURRENCY = MAX_ACTIVE_REQUESTS
 let activeRequestCount = 0
 
 function drainRequestQueue() {
@@ -691,7 +692,7 @@ export async function getPlayerAnalysis(
   const finishedEvents = response.Payload
     .filter((event) => event.State === FINISHED_EVENT_STATE && event.Type === 4)
     .slice(0, maxEvents)
-  const events = await mapWithConcurrency(finishedEvents, 5, async (event) => {
+  const events = await mapWithConcurrency(finishedEvents, MAX_EVENT_ANALYSIS_CONCURRENCY, async (event) => {
     const analysis = await analyzeEvent(event, playerId)
     onEvent?.(analysis)
     return analysis

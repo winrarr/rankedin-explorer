@@ -318,6 +318,13 @@ type ProgressSeries = {
   points: ProgressPoint[]
 }
 
+type ProgressRegression = {
+  startTimestamp: number
+  endTimestamp: number
+  startPercentage: number
+  endPercentage: number
+}
+
 const progressSeriesColors = ['#587866', '#1f6b82', '#d56e59', '#8b6f47', '#6b638c']
 
 function progressPoints(events: PlayerEventAnalysis[]) {
@@ -345,6 +352,38 @@ function progressSeries(events: PlayerEventAnalysis[]) {
       new Date(first.event.startDate).getTime() - new Date(second.event.startDate).getTime()
     )),
   })).sort((first, second) => first.className.localeCompare(second.className))
+}
+
+function progressRegression(points: ProgressPoint[]): ProgressRegression | null {
+  const datedPoints = points
+    .map((point) => ({
+      timestamp: new Date(point.event.startDate).getTime(),
+      percentage: point.percentage,
+    }))
+    .filter((point) => !Number.isNaN(point.timestamp))
+  if (datedPoints.length < 2) return null
+
+  const startTimestamp = Math.min(...datedPoints.map((point) => point.timestamp))
+  const endTimestamp = Math.max(...datedPoints.map((point) => point.timestamp))
+  const timeSpan = Math.max(endTimestamp - startTimestamp, 1)
+  const normalizedPoints = datedPoints.map((point) => ({
+    x: (point.timestamp - startTimestamp) / timeSpan,
+    y: point.percentage,
+  }))
+  const meanX = normalizedPoints.reduce((sum, point) => sum + point.x, 0) / normalizedPoints.length
+  const meanY = normalizedPoints.reduce((sum, point) => sum + point.y, 0) / normalizedPoints.length
+  const denominator = normalizedPoints.reduce((sum, point) => sum + (point.x - meanX) ** 2, 0)
+  const slope = denominator
+    ? normalizedPoints.reduce((sum, point) => sum + (point.x - meanX) * (point.y - meanY), 0) / denominator
+    : 0
+  const predict = (x: number) => Math.min(1, Math.max(0, meanY + slope * (x - meanX)))
+
+  return {
+    startTimestamp,
+    endTimestamp,
+    startPercentage: predict(0),
+    endPercentage: predict(1),
+  }
 }
 
 function median(values: number[]) {
@@ -637,6 +676,7 @@ function ProgressChart({ series }: ProgressChartProps) {
           </button>
         ))}
       </div>
+      {series.some((item) => item.points.length > 1) && <div className="progress-chart-key"><span /> Dotted line = linear direction, not a forecast</div>}
 
       {!points.length ? (
         <div className="progress-chart-empty">Select a class above to show its results.</div>
@@ -658,8 +698,19 @@ function ProgressChart({ series }: ProgressChartProps) {
           {visibleSeries.map((item) => {
             const color = progressSeriesColors[series.indexOf(item) % progressSeriesColors.length]
             const linePoints = item.points.map((point) => `${xPosition(point.event.startDate)},${yPosition(point.percentage)}`).join(' ')
+            const regression = progressRegression(item.points)
             return (
               <g key={item.className}>
+                {regression && (
+                  <line
+                    className="progress-regression-line"
+                    x1={chartLeft + ((regression.startTimestamp - start) / range) * plotWidth}
+                    x2={chartLeft + ((regression.endTimestamp - start) / range) * plotWidth}
+                    y1={yPosition(regression.startPercentage)}
+                    y2={yPosition(regression.endPercentage)}
+                    stroke={color}
+                  />
+                )}
                 {item.points.length > 1 && <polyline className="progress-series-line" points={linePoints} stroke={color} />}
                 {item.points.map((point) => (
                   <circle
@@ -784,7 +835,7 @@ function PlayerProgressWorkspace({ profile, analysis, error, isLoading, loadingS
               <span className="progress-card-direction">lower is better</span>
             </div>
             <ProgressChart series={series} />
-            <p className="progress-chart-note"><Info size={14} /> Placement percentage is standing divided by the finished field size. Lines only connect results within the same normalized class.</p>
+            <p className="progress-chart-note"><Info size={14} /> Placement percentage is standing divided by the finished field size. Solid lines connect results within the same normalized class; dotted lines show their linear direction and are not forecasts.</p>
           </section>
 
           <section className="progress-series-grid" aria-label="Progress by level and class">
