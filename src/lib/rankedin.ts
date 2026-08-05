@@ -121,6 +121,22 @@ export type LeagueFixtureAnalysis = {
   matches: LeagueMatchAnalysis[]
 }
 
+export type LeagueStandingSnapshot = {
+  fixtureId: number
+  date: string
+  standing: number
+  teamCount: number
+  result: 'win' | 'loss' | 'draw' | null
+  teamScore: number | null
+  opponentScore: number | null
+  opponentTeam: string
+  teamWins: number
+  matchPoints: number
+  matchDifference: number
+  setDifference: number
+  gameDifference: number
+}
+
 export type LeagueSeasonAnalysis = {
   id: number
   name: string
@@ -140,6 +156,7 @@ export type LeagueSeasonAnalysis = {
   teamLosses: number | null
   eventUrl: string
   fixtures: LeagueFixtureAnalysis[]
+  standingHistory: LeagueStandingSnapshot[]
 }
 
 export type PlayerLeagueAnalysis = {
@@ -245,6 +262,7 @@ type RawTeamLeagueHeader = {
   Name: string
   StartDate: string
   EndDate: string
+  Sport: number
   EventUrl?: string
 }
 
@@ -267,17 +285,32 @@ type RawLeagueTeamHomepage = {
 }
 
 type RawTeamStanding = {
+  participantId: number
   standing: number
   participantUrl: string
   participantName: string
   matchPoints: number
   played: number
+  draws: number
   wins: number
   losses: number
+  gamesWon: number
+  gamesLost: number
+  gamesDifference: number
+  teamGamesWon: number
+  teamGamesLost: number
+  teamGamesDifference: number
+  scoredPoints: number
+  concededPoints: number
+  pointsDifference: number
 }
 
 type RawTeamStandingsResponse = {
   scoresViewModels: RawTeamStanding[]
+}
+
+type RawStandingsRulesResponse = {
+  TeamMatchesRules?: string[]
 }
 
 type RawLeagueFixtureSide = {
@@ -407,6 +440,7 @@ type QueuedRequest = {
 const requestQueue: QueuedRequest[] = []
 const MAX_ACTIVE_REQUESTS = 25
 const MAX_EVENT_ANALYSIS_CONCURRENCY = MAX_ACTIVE_REQUESTS
+const MAX_LEAGUE_STANDING_CONCURRENCY = 6
 const MAX_RETRY_ATTEMPTS = 4
 const PARTICIPATED_EVENTS_TAKE = 50
 let activeRequestCount = 0
@@ -1010,6 +1044,203 @@ function normalizeLeagueFixture(fixture: RawLeagueFixture, teamId: number): Leag
   }
 }
 
+type LeagueAggregate = {
+  id: string
+  participantUrl: string
+  participantName: string
+  wins: number
+  losses: number
+  draws: number
+  matchPoints: number
+  gamesWon: number
+  gamesLost: number
+  teamGamesWon: number
+  teamGamesLost: number
+  scoredPoints: number
+  concededPoints: number
+  headToHead: Map<string, { wins: number; losses: number }>
+}
+
+const DEFAULT_LEAGUE_STANDING_RULES = [
+  'Team Matches Won',
+  'Matches Difference',
+  'Sets Difference',
+  'Game Difference',
+  'Head To Head',
+  'Match-Points',
+  'Individual Matches Won',
+]
+
+function leagueAggregateKey(row: RawTeamStanding) {
+  return row.participantUrl || String(row.participantId)
+}
+
+function createLeagueAggregate(row: RawTeamStanding): LeagueAggregate {
+  return {
+    id: leagueAggregateKey(row),
+    participantUrl: row.participantUrl,
+    participantName: row.participantName,
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    matchPoints: 0,
+    gamesWon: 0,
+    gamesLost: 0,
+    teamGamesWon: 0,
+    teamGamesLost: 0,
+    scoredPoints: 0,
+    concededPoints: 0,
+    headToHead: new Map(),
+  }
+}
+
+function addLeagueMatchStanding(aggregate: LeagueAggregate, row: RawTeamStanding) {
+  aggregate.wins += row.wins
+  aggregate.losses += row.losses
+  aggregate.draws += row.draws
+  aggregate.matchPoints += row.matchPoints
+  aggregate.gamesWon += row.gamesWon
+  aggregate.gamesLost += row.gamesLost
+  aggregate.teamGamesWon += row.teamGamesWon
+  aggregate.teamGamesLost += row.teamGamesLost
+  aggregate.scoredPoints += row.scoredPoints
+  aggregate.concededPoints += row.concededPoints
+}
+
+function leagueRuleValue(aggregate: LeagueAggregate, rule: string) {
+  const normalized = rule.toLowerCase()
+  if (normalized.includes('team matches won')) return aggregate.wins
+  if (normalized.includes('matches difference')) return aggregate.gamesWon - aggregate.gamesLost
+  if (normalized.includes('sets difference')) return aggregate.teamGamesWon - aggregate.teamGamesLost
+  if (normalized.includes('game difference')) return aggregate.scoredPoints - aggregate.concededPoints
+  if (normalized.includes('match-points')) return aggregate.matchPoints
+  if (normalized.includes('individual matches won')) return aggregate.gamesWon
+  return null
+}
+
+function compareLeagueAggregates(
+  first: LeagueAggregate,
+  second: LeagueAggregate,
+  rules: string[],
+) {
+  for (const rule of rules) {
+    if (rule.toLowerCase().includes('head to head')) {
+      const firstHead = first.headToHead.get(second.id)?.wins ?? 0
+      const secondHead = second.headToHead.get(first.id)?.wins ?? 0
+      if (firstHead !== secondHead) return secondHead - firstHead
+      continue
+    }
+
+    const firstValue = leagueRuleValue(first, rule)
+    const secondValue = leagueRuleValue(second, rule)
+    if (firstValue !== null && secondValue !== null && firstValue !== secondValue) {
+      return secondValue - firstValue
+    }
+  }
+
+  return first.participantName.localeCompare(second.participantName)
+}
+
+function leagueFixtureResult(fixture: RawLeagueFixture, teamId: number): 'win' | 'loss' | 'draw' | null {
+  const team = fixture.team1.id === teamId ? fixture.team1 : fixture.team2.id === teamId ? fixture.team2 : null
+  const opponent = fixture.team1.id === teamId ? fixture.team2 : fixture.team2.id === teamId ? fixture.team1 : null
+  if (!team || !opponent || !fixture.showResults) return null
+  if (team.isWinner === true) return 'win'
+  if (opponent.isWinner === true) return 'loss'
+  if (team.isWinner === false && opponent.isWinner === false) return 'draw'
+  return null
+}
+
+async function reconstructLeagueStandingHistory(
+  poolId: number,
+  teamId: number,
+  finalStandings: RawTeamStandingsResponse,
+  rules: string[],
+): Promise<LeagueStandingSnapshot[]> {
+  const poolMatches = await request<RawTeamMatchesResponse>(
+    `/teamleague/GetMatchesForPoolAsync${query({ poolId, language: 'en' })}`,
+  )
+  const fixtures = poolMatches.matches.filter((fixture) => fixture.showResults)
+  const fixtureStandings = await mapWithConcurrency(
+    fixtures,
+    MAX_LEAGUE_STANDING_CONCURRENCY,
+    async (fixture) => ({
+      fixture,
+      standings: await request<RawTeamStandingsResponse>(
+        `/teamleague/TeamLeagueTeamMatchStandingsAsync${query({
+          teamMatchId: fixture.matchId,
+          language: 'en',
+        })}`,
+      ),
+    }),
+  )
+  const aggregates = new Map(finalStandings.scoresViewModels.map((row) => [leagueAggregateKey(row), createLeagueAggregate(row)]))
+  const entries = fixtureStandings
+    .map((entry) => ({
+      ...entry,
+      timestamp: parseRankedinDate(entry.fixture.details?.time ?? entry.fixture.details?.date ?? ''),
+    }))
+    .sort((first, second) => first.timestamp - second.timestamp)
+  const snapshots: LeagueStandingSnapshot[] = []
+  let entryIndex = 0
+
+  while (entryIndex < entries.length) {
+    const currentTimestamp = entries[entryIndex].timestamp
+    const currentEntries = Number.isNaN(currentTimestamp)
+      ? [entries[entryIndex]]
+      : entries.filter((entry) => entry.timestamp === currentTimestamp)
+    entryIndex += currentEntries.length
+
+    currentEntries.forEach(({ standings }) => {
+      const [firstRow, secondRow] = standings.scoresViewModels
+      if (!firstRow || !secondRow) return
+      const firstKey = leagueAggregateKey(firstRow)
+      const secondKey = leagueAggregateKey(secondRow)
+      const firstAggregate = aggregates.get(firstKey) ?? createLeagueAggregate(firstRow)
+      const secondAggregate = aggregates.get(secondKey) ?? createLeagueAggregate(secondRow)
+      addLeagueMatchStanding(firstAggregate, firstRow)
+      addLeagueMatchStanding(secondAggregate, secondRow)
+      aggregates.set(firstKey, firstAggregate)
+      aggregates.set(secondKey, secondAggregate)
+      const firstHead = firstAggregate.headToHead.get(secondKey) ?? { wins: 0, losses: 0 }
+      const secondHead = secondAggregate.headToHead.get(firstKey) ?? { wins: 0, losses: 0 }
+      firstAggregate.headToHead.set(secondKey, {
+        wins: firstHead.wins + firstRow.wins,
+        losses: firstHead.losses + firstRow.losses,
+      })
+      secondAggregate.headToHead.set(firstKey, {
+        wins: secondHead.wins + secondRow.wins,
+        losses: secondHead.losses + secondRow.losses,
+      })
+    })
+
+    const ordered = [...aggregates.values()].sort((first, second) => compareLeagueAggregates(first, second, rules))
+    currentEntries.forEach(({ fixture }) => {
+      if (fixture.team1.id !== teamId && fixture.team2.id !== teamId) return
+      const selected = ordered.find((aggregate) => aggregate.participantUrl.includes(`/${teamId}`))
+      const opponent = fixture.team1.id === teamId ? fixture.team2 : fixture.team1
+      if (!selected) return
+      snapshots.push({
+        fixtureId: fixture.matchId,
+        date: fixture.details?.time ?? fixture.details?.date ?? '',
+        standing: ordered.indexOf(selected) + 1,
+        teamCount: ordered.length,
+        result: leagueFixtureResult(fixture, teamId),
+        teamScore: fixture.team1.id === teamId ? fixture.team1.result : fixture.team2.result,
+        opponentScore: opponent.result,
+        opponentTeam: opponent.name,
+        teamWins: selected.wins,
+        matchPoints: selected.matchPoints,
+        matchDifference: selected.gamesWon - selected.gamesLost,
+        setDifference: selected.teamGamesWon - selected.teamGamesLost,
+        gameDifference: selected.scoredPoints - selected.concededPoints,
+      })
+    })
+  }
+
+  return snapshots
+}
+
 async function enrichLeagueFixture(fixture: LeagueFixtureAnalysis, playerId: number) {
   try {
     const response = await request<RawLeagueDoublesResponse>(
@@ -1040,9 +1271,18 @@ async function analyzeLeagueTeam(
         `/teamleague/GetTeamMatchesAsync${query({ teamId: detail.teamId, language: 'en' })}`,
       ),
     ])
-    const standings = await request<RawTeamStandingsResponse>(
-      `/teamleague/GetTeamStandingsAsync${query({ poolId: homepage.poolId, language: 'en' })}`,
-    )
+    const [standings, rules] = await Promise.all([
+      request<RawTeamStandingsResponse>(
+        `/teamleague/GetTeamStandingsAsync${query({ poolId: homepage.poolId, language: 'en' })}`,
+      ),
+      request<RawStandingsRulesResponse>(
+        `/teamleague/GetStandingsRulesSettingsAsync${query({
+          teamLeagueId: event.Id,
+          sport: event.Sport,
+          language: 'en',
+        })}`,
+      ).catch(() => ({ TeamMatchesRules: [] })),
+    ])
     const teamStanding = standings.scoresViewModels.find((standing) => (
       standing.participantUrl.includes(`/${detail.teamId}`) || standing.participantName === detail.teamName
     ))
@@ -1050,11 +1290,21 @@ async function analyzeLeagueTeam(
       .map((fixture) => normalizeLeagueFixture(fixture, detail.teamId))
       .filter((fixture): fixture is LeagueFixtureAnalysis => fixture !== null)
       .sort((first, second) => parseRankedinDate(first.date) - parseRankedinDate(second.date))
-    const enrichedFixtures = await mapWithConcurrency(
+    const standingHistoryPromise = reconstructLeagueStandingHistory(
+      homepage.poolId,
+      detail.teamId,
+      standings,
+      rules.TeamMatchesRules?.length ? rules.TeamMatchesRules : DEFAULT_LEAGUE_STANDING_RULES,
+    ).catch(() => [])
+    const enrichedFixturesPromise = mapWithConcurrency(
       fixtures,
-      MAX_EVENT_ANALYSIS_CONCURRENCY,
+      MAX_LEAGUE_STANDING_CONCURRENCY,
       (fixture) => enrichLeagueFixture(fixture, playerId),
     )
+    const [standingHistory, enrichedFixtures] = await Promise.all([
+      standingHistoryPromise,
+      enrichedFixturesPromise,
+    ])
 
     return {
       id: event.Id,
@@ -1075,6 +1325,7 @@ async function analyzeLeagueTeam(
       teamLosses: teamStanding?.losses ?? null,
       eventUrl: event.EventUrl ?? `/en/teamleague/${event.Id}`,
       fixtures: enrichedFixtures,
+      standingHistory,
     }
   } catch {
     return null
