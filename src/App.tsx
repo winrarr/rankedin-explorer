@@ -191,7 +191,7 @@ function compactClassName(className: string | null) {
   if (!gender && /kvinder|kvinde|dame|women|woman/i.test(cleanedName)) gender = 'Kvinder'
   if (!gender && /herrer|herre|men|male/i.test(cleanedName)) gender = 'Herrer'
   if (!gender) return `DPF${dpfMatch[1]}`
-  if (gender === 'Mix') return `Mix DPF${dpfMatch[1]}`
+  if (gender === 'Mix') return `DPF${dpfMatch[1]} Mix`
   return `DPF${dpfMatch[1]} ${gender}`
 }
 
@@ -199,9 +199,20 @@ function fieldPlacementEvents(analysis: PlayerAnalysis | null) {
   return analysis?.events.filter((event) => event.className).slice(0, 5) ?? []
 }
 
+function placementTone(event: PlayerEventAnalysis) {
+  if (event.standing === null) return 'placement-tone-neutral'
+  if (event.standing <= 2) return 'placement-tone-good'
+  if (event.fieldSize && event.standing > event.fieldSize / 2) return 'placement-tone-challenging'
+  return 'placement-tone-neutral'
+}
+
 function fieldPlacementSummary(event: PlayerEventAnalysis) {
-  const fieldSize = event.fieldSize ? ` of ${event.fieldSize} pairs` : ''
-  return `${formatCompactDate(event.startDate)} ${compactClassName(event.className)} ${placementSummaryPosition(event)}${fieldSize}`
+  return {
+    date: formatCompactDate(event.startDate),
+    className: compactClassName(event.className),
+    position: placementSummaryPosition(event),
+    fieldSize: event.fieldSize ? `of ${event.fieldSize} pairs` : null,
+  }
 }
 
 function matchRecord(matches: PlayerEventAnalysis['matches']) {
@@ -322,7 +333,7 @@ function PlayerHistoryColumn({
                       <strong>{event.name}</strong>
                       <span>{formatDate(event.startDate)}</span>
                     </div>
-                    <span className="placement-class">{event.className ?? 'Class result not published'}</span>
+                    <span className="placement-class">{event.className ? compactClassName(event.className) : 'Class result not published'}</span>
                     <span className="placement-partner">
                       {event.partner ? `With ${event.partner}` : 'Partner unavailable'}
                       {eventMatches.length ? ` · ${eventRecord.wins}–${eventRecord.losses} in matches` : ''}
@@ -759,15 +770,21 @@ function App() {
                                     {!fieldPlacementsLoaded && <span className="field-placement-muted">Not loaded</span>}
                                     {fieldPlacementsLoaded && summary === null && <span className="field-placement-muted">Unavailable</span>}
                                     {fieldPlacementsLoaded && summary && !events.length && <span className="field-placement-muted">No finished events</span>}
-                                    {events.map((event) => (
-                                      <span
-                                        className="field-placement-tag"
-                                        key={`${player.id}-${event.id}`}
-                                        title={`${event.name} · ${event.className ?? 'Class unavailable'}`}
-                                      >
-                                        {fieldPlacementSummary(event)}
-                                      </span>
-                                    ))}
+                                    {events.map((event) => {
+                                      const placement = fieldPlacementSummary(event)
+                                      return (
+                                        <div
+                                          className={`field-placement-tag ${placementTone(event)}`}
+                                          key={`${player.id}-${event.id}`}
+                                          title={`${event.name} · ${event.className ?? 'Class unavailable'}`}
+                                        >
+                                          <span className="field-placement-date">{placement.date}</span>
+                                          <span className="field-placement-class">{placement.className}</span>
+                                          <strong className="field-placement-result">{placement.position}</strong>
+                                          {placement.fieldSize && <span className="field-placement-field">{placement.fieldSize}</span>}
+                                        </div>
+                                      )
+                                    })}
                                   </span>
                                 </div>
                               )
