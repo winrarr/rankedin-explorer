@@ -9,6 +9,12 @@ export type PlayerRecord = {
   rating: number | null
 }
 
+export type PlayerSearchResult = {
+  id: number
+  rankedInId: string
+  name: string
+}
+
 export type PlayerProfile = PlayerRecord & {
   countryCode: string | null
   homeClubName: string | null
@@ -88,6 +94,12 @@ type RawPlayer = {
   Name: string
   PlayerUrl: string
   RatingBegin: number | null
+}
+
+type RawPlayerSearchResult = {
+  Id: number
+  Name: string
+  RankedinId: string
 }
 
 type RawParticipant = {
@@ -404,6 +416,23 @@ export function parsePlayerReference(value: string) {
   if (!rankedInId) throw new Error('Paste a Rankedin player profile URL or R-number.')
 
   return { rankedInId }
+}
+
+export async function searchPlayersByName(term: string, take = 8): Promise<PlayerSearchResult[]> {
+  const normalizedTerm = term.trim()
+  if (!normalizedTerm) return []
+
+  const response = await request<RawPlayerSearchResult[]>(
+    `/Search/GetPlayersByNameSimpleAsync${query({ name: normalizedTerm, take, skip: 0 })}`,
+  )
+
+  return response
+    .filter((player) => player.RankedinId && player.Name)
+    .map((player) => ({
+      id: player.Id,
+      rankedInId: player.RankedinId,
+      name: player.Name,
+    }))
 }
 
 export async function getPlayerProfile(reference: string): Promise<PlayerProfile> {

@@ -3,8 +3,10 @@ import {
   Activity,
   ArrowUpRight,
   CalendarDays,
+  Check,
   ChevronDown,
   CircleHelp,
+  Copy,
   Database,
   ExternalLink,
   Gauge,
@@ -27,6 +29,7 @@ import {
   getClassParticipants,
   getPlayerAnalysis,
   getPlayerProfile,
+  searchPlayersByName,
   getTournamentSnapshot,
   type MatchRecord,
   type PairRecord,
@@ -34,6 +37,7 @@ import {
   type PlayerEventAnalysis,
   type PlayerProfile,
   type PlayerRecord,
+  type PlayerSearchResult,
   type TournamentSnapshot,
 } from './lib/rankedin'
 import {
@@ -44,13 +48,61 @@ import {
 } from './lib/preferences'
 import './App.css'
 
-const DEFAULT_TOURNAMENT_URL =
-  'https://www.rankedin.com/en/tournament/70385/meny-x-wepadel-open/players'
-const DEFAULT_PLAYER_REFERENCE =
-  'https://www.rankedin.com/en/player/R000229993/rasmus-kock-thygesen/info'
 const PLAYER_PROGRESS_HISTORY_LIMIT = 25
 
 type WorkspaceMode = 'tournament' | 'player'
+
+type SharedLocation = {
+  mode: WorkspaceMode
+  tournamentReference: string
+  classId: number | undefined
+  playerReference: string
+}
+
+function readSharedLocation(): SharedLocation {
+  if (typeof window === 'undefined') {
+    return { mode: 'tournament', tournamentReference: '', classId: undefined, playerReference: '' }
+  }
+
+  const params = new URLSearchParams(window.location.search)
+  const tournamentReference = params.get('tournament')?.trim() ?? ''
+  const playerReference = params.get('player')?.trim() ?? ''
+  const modeParam = params.get('mode')
+  const mode: WorkspaceMode = modeParam === 'player' || (!tournamentReference && playerReference)
+    ? 'player'
+    : 'tournament'
+  const classValue = Number(params.get('class'))
+
+  return {
+    mode,
+    tournamentReference,
+    classId: Number.isInteger(classValue) && classValue > 0 ? classValue : undefined,
+    playerReference,
+  }
+}
+
+function updateSharedLocation({ mode, tournament, classId, player }: {
+  mode: WorkspaceMode
+  tournament?: string
+  classId?: number
+  player?: string
+}) {
+  if (typeof window === 'undefined') return
+
+  const params = new URLSearchParams()
+  if (mode === 'tournament' && tournament?.trim()) {
+    params.set('mode', mode)
+    params.set('tournament', tournament.trim())
+    if (classId) params.set('class', String(classId))
+  }
+  if (mode === 'player' && player?.trim()) {
+    params.set('mode', mode)
+    params.set('player', player.trim())
+  }
+
+  const query = params.toString()
+  window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`)
+}
 
 const demoParticipants: PairRecord[] = [
   {
@@ -626,9 +678,12 @@ type PlayerProgressWorkspaceProps = {
   isLoading: boolean
   loadingStage: 'profile' | 'history' | null
   historyLimit: number
+  onCopyShareLink: () => void
+  shareCopied: boolean
+  canShare: boolean
 }
 
-function PlayerProgressWorkspace({ profile, analysis, error, isLoading, loadingStage, historyLimit }: PlayerProgressWorkspaceProps) {
+function PlayerProgressWorkspace({ profile, analysis, error, isLoading, loadingStage, historyLimit, onCopyShareLink, shareCopied, canShare }: PlayerProgressWorkspaceProps) {
   const series = useMemo(() => progressSeries(analysis?.events ?? []), [analysis])
   const points = useMemo(() => series.flatMap((item) => item.points), [series])
   const latestPoint = [...points].sort((first, second) => (
@@ -647,6 +702,9 @@ function PlayerProgressWorkspace({ profile, analysis, error, isLoading, loadingS
         </div>
         {profile && (
           <div className="workspace-actions">
+            <button className="text-button share-button" type="button" onClick={onCopyShareLink} disabled={!canShare}>
+              {shareCopied ? <Check size={15} /> : <Copy size={15} />} {shareCopied ? 'Link copied' : 'Copy share link'}
+            </button>
             <a className="outline-button" href={`https://www.rankedin.com${profile.url}`} target="_blank" rel="noreferrer">Open profile <ArrowUpRight size={15} /></a>
           </div>
         )}
@@ -767,13 +825,14 @@ function PlayerProgressWorkspace({ profile, analysis, error, isLoading, loadingS
 }
 
 function App() {
+  const [initialLocation] = useState<SharedLocation>(() => readSharedLocation())
   const [preferences, setPreferences] = useState<Preferences>(() => {
     if (typeof localStorage === 'undefined') return DEFAULT_PREFERENCES
     return loadPreferences()
   })
-  const [activeMode, setActiveMode] = useState<WorkspaceMode>('tournament')
-  const [tournamentUrl, setTournamentUrl] = useState(DEFAULT_TOURNAMENT_URL)
-  const [playerReference, setPlayerReference] = useState(DEFAULT_PLAYER_REFERENCE)
+  const [activeMode, setActiveMode] = useState<WorkspaceMode>(initialLocation.mode)
+  const [tournamentUrl, setTournamentUrl] = useState(initialLocation.tournamentReference)
+  const [playerReference, setPlayerReference] = useState(initialLocation.playerReference)
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null)
   const [playerAnalysis, setPlayerAnalysis] = useState<PlayerAnalysis | null>(null)
   const [isAnalyzingPlayer, setIsAnalyzingPlayer] = useState(false)
@@ -793,8 +852,15 @@ function App() {
   const [fieldPlacementsLoaded, setFieldPlacementsLoaded] = useState(false)
   const [isLoadingFieldPlacements, setIsLoadingFieldPlacements] = useState(false)
   const [fieldPlacementError, setFieldPlacementError] = useState<string | null>(null)
+  const [showPlayerSearch, setShowPlayerSearch] = useState(false)
+  const [playerSearchTerm, setPlayerSearchTerm] = useState('')
+  const [playerSearchResults, setPlayerSearchResults] = useState<PlayerSearchResult[]>([])
+  const [isSearchingPlayers, setIsSearchingPlayers] = useState(false)
+  const [playerSearchError, setPlayerSearchError] = useState<string | null>(null)
+  const [shareCopied, setShareCopied] = useState(false)
   const fieldPlacementRequestRef = useRef(0)
   const playerRequestRef = useRef(0)
+  const playerSearchRequestRef = useRef(0)
   const [error, setError] = useState<string | null>(null)
   const [showPreferences, setShowPreferences] = useState(false)
 
@@ -802,6 +868,15 @@ function App() {
     savePreferences(preferences)
     document.documentElement.dataset.theme = preferences.theme
   }, [preferences])
+
+  useEffect(() => {
+    if (initialLocation.mode === 'tournament' && initialLocation.tournamentReference) {
+      void analyzeTournament(initialLocation.tournamentReference, initialLocation.classId)
+    }
+    if (initialLocation.mode === 'player' && initialLocation.playerReference) {
+      void analyzePlayer(initialLocation.playerReference)
+    }
+  }, [initialLocation])
 
   useEffect(() => {
     if (activeMode !== 'tournament' || snapshot.source !== 'live') return
@@ -831,20 +906,27 @@ function App() {
     [fieldPlacementSummaries],
   )
 
-  async function analyzeTournament() {
+  async function analyzeTournament(reference = tournamentUrl, selectedClassId?: number) {
+    const normalizedReference = reference.trim()
+    if (!normalizedReference) return
+
     fieldPlacementRequestRef.current += 1
     setIsAnalyzing(true)
     setError(null)
+    setShareCopied(false)
     setSelectedPairId(null)
     setPairHistory(null)
     setFieldPlacementSummaries({})
     setFieldPlacementsLoaded(false)
     setFieldPlacementError(null)
     setIsLoadingFieldPlacements(false)
+    setTournamentUrl(normalizedReference)
+    updateSharedLocation({ mode: 'tournament', tournament: normalizedReference, classId: selectedClassId })
 
     try {
-      const result = await getTournamentSnapshot(tournamentUrl)
+      const result = await getTournamentSnapshot(normalizedReference, selectedClassId)
       setSnapshot(result)
+      updateSharedLocation({ mode: 'tournament', tournament: normalizedReference, classId: result.selectedClass.id })
       setSearchTerm('')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'The tournament could not be loaded.')
@@ -853,18 +935,25 @@ function App() {
     }
   }
 
-  async function analyzePlayer() {
+  async function analyzePlayer(reference = playerReference) {
+    const normalizedReference = reference.trim()
+    if (!normalizedReference) return
+
     const requestId = playerRequestRef.current + 1
     playerRequestRef.current = requestId
     setIsAnalyzingPlayer(true)
     setPlayerLoadingStage('profile')
     setPlayerError(null)
+    setShareCopied(false)
     setPlayerProfile(null)
     setPlayerAnalysis(null)
+    setPlayerReference(normalizedReference)
+    updateSharedLocation({ mode: 'player', player: normalizedReference })
 
     try {
-      const profile = await getPlayerProfile(playerReference)
+      const profile = await getPlayerProfile(normalizedReference)
       if (requestId !== playerRequestRef.current) return
+      updateSharedLocation({ mode: 'player', player: profile.rankedInId })
       setPlayerProfile(profile)
       setPlayerAnalysis({ playerId: profile.id, playerName: profile.name, events: [] })
       setPlayerLoadingStage('history')
@@ -893,6 +982,70 @@ function App() {
     }
   }
 
+  async function searchPlayers() {
+    const normalizedTerm = playerSearchTerm.trim()
+    if (!normalizedTerm) return
+
+    const requestId = playerSearchRequestRef.current + 1
+    playerSearchRequestRef.current = requestId
+    setIsSearchingPlayers(true)
+    setPlayerSearchError(null)
+    setPlayerSearchResults([])
+
+    try {
+      const results = await searchPlayersByName(normalizedTerm)
+      if (requestId !== playerSearchRequestRef.current) return
+      setPlayerSearchResults(results)
+    } catch (caught) {
+      if (requestId !== playerSearchRequestRef.current) return
+      setPlayerSearchError(caught instanceof Error ? caught.message : 'Player search could not be completed.')
+    } finally {
+      if (requestId === playerSearchRequestRef.current) setIsSearchingPlayers(false)
+    }
+  }
+
+  function selectPlayerSearchResult(player: PlayerSearchResult) {
+    setPlayerSearchTerm('')
+    setPlayerSearchResults([])
+    setPlayerSearchError(null)
+    setShowPlayerSearch(false)
+    void analyzePlayer(player.rankedInId)
+  }
+
+  function togglePlayerSearch() {
+    setShowPlayerSearch((open) => !open)
+    if (showPlayerSearch) {
+      setPlayerSearchTerm('')
+      setPlayerSearchResults([])
+      setPlayerSearchError(null)
+    }
+  }
+
+  function clearReference() {
+    if (activeMode === 'tournament') {
+      setTournamentUrl('')
+      updateSharedLocation({ mode: 'tournament' })
+      return
+    }
+
+    setPlayerReference('')
+    updateSharedLocation({ mode: 'player' })
+  }
+
+  async function copyShareLink() {
+    if (typeof window === 'undefined') return
+
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      setShareCopied(true)
+      window.setTimeout(() => setShareCopied(false), 2200)
+    } catch {
+      const message = 'The share link could not be copied. Copy the address from your browser instead.'
+      if (activeMode === 'tournament') setError(message)
+      else setPlayerError(message)
+    }
+  }
+
   async function chooseClass(classId: number) {
     const nextClass = snapshot.classes.find((item) => item.id === classId)
     if (!nextClass || nextClass.id === snapshot.selectedClass.id) return
@@ -910,6 +1063,7 @@ function App() {
       setFieldPlacementsLoaded(false)
       setFieldPlacementError(null)
       setIsLoadingFieldPlacements(false)
+      updateSharedLocation({ mode: 'tournament', tournament: tournamentUrl, classId: nextClass.id })
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'This class could not be loaded.')
     } finally {
@@ -1001,7 +1155,8 @@ function App() {
     setActiveMode('tournament')
     fieldPlacementRequestRef.current += 1
     setSnapshot(demoSnapshot)
-    setTournamentUrl(DEFAULT_TOURNAMENT_URL)
+    setTournamentUrl('')
+    setPlayerReference('')
     setSelectedPairId(null)
     setPairHistory(null)
     setFieldPlacementSummaries({})
@@ -1015,6 +1170,12 @@ function App() {
     setPlayerError(null)
     setIsAnalyzingPlayer(false)
     setPlayerLoadingStage(null)
+    setShowPlayerSearch(false)
+    setPlayerSearchTerm('')
+    setPlayerSearchResults([])
+    setPlayerSearchError(null)
+    setShareCopied(false)
+    updateSharedLocation({ mode: 'tournament' })
   }
 
   function switchMode(nextMode: WorkspaceMode) {
@@ -1030,12 +1191,19 @@ function App() {
     setActiveMode(nextMode)
     setError(null)
     setPlayerError(null)
+    setShareCopied(false)
+    updateSharedLocation({
+      mode: nextMode,
+      tournament: tournamentUrl,
+      classId: snapshot.source === 'live' ? snapshot.selectedClass.id : undefined,
+      player: playerReference,
+    })
   }
 
   return (
     <div className={`app-shell ${preferences.density === 'compact' ? 'density-compact' : ''}`}>
       <header className="topbar">
-        <a className="brand" href="." aria-label="Rankedin Explorer home" onClick={resetToPreview}>
+        <a className="brand" href="." aria-label="Rankedin Explorer home" onClick={(event) => { event.preventDefault(); resetToPreview() }}>
           <span className="brand-mark"><Activity size={16} strokeWidth={2.5} /></span>
           <span>rankedin <strong>explorer</strong></span>
         </a>
@@ -1162,14 +1330,53 @@ function App() {
                     }}
                     placeholder={activeMode === 'tournament' ? 'Paste a Rankedin tournament URL or ID' : 'Paste a Rankedin profile URL or R-number'}
                   />
-                  {(activeMode === 'tournament' ? tournamentUrl : playerReference) && <button className="clear-input" type="button" aria-label={`Clear ${activeMode} reference`} onClick={() => activeMode === 'tournament' ? setTournamentUrl('') : setPlayerReference('')}><X size={14} /></button>}
+                  {(activeMode === 'tournament' ? tournamentUrl : playerReference) && <button className="clear-input" type="button" aria-label={`Clear ${activeMode} reference`} onClick={clearReference}><X size={14} /></button>}
                 </div>
                 <button className="primary-button" type="button" onClick={() => void (activeMode === 'tournament' ? analyzeTournament() : analyzePlayer())} disabled={activeMode === 'tournament' ? isAnalyzing || !tournamentUrl.trim() : isAnalyzingPlayer || !playerReference.trim()}>
                   {(activeMode === 'tournament' ? isAnalyzing : isAnalyzingPlayer) ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}
                   {(activeMode === 'tournament' ? isAnalyzing : isAnalyzingPlayer) ? 'Reading…' : activeMode === 'tournament' ? 'Analyze field' : 'Read progress'}
                 </button>
               </div>
-              <p className="input-hint"><Info size={14} /> No login. No database. {activeMode === 'tournament' ? 'The example field is ready to explore.' : 'Only finished public tournament results are charted.'}</p>
+              {activeMode === 'player' && (
+                <div className="player-search">
+                  <button className="player-search-toggle" type="button" aria-expanded={showPlayerSearch} onClick={togglePlayerSearch}>
+                    <Search size={14} /> {showPlayerSearch ? 'Close player search' : 'Search Rankedin players by name'}
+                  </button>
+                  {showPlayerSearch && (
+                    <div className="player-search-panel">
+                      <div className="player-search-row">
+                        <div className="url-input-wrap">
+                          <Search size={16} />
+                          <input
+                            value={playerSearchTerm}
+                            onChange={(event) => setPlayerSearchTerm(event.target.value)}
+                            onKeyDown={(event) => { if (event.key === 'Enter') void searchPlayers() }}
+                            placeholder="Search by player name"
+                            aria-label="Search Rankedin players by name"
+                          />
+                        </div>
+                        <button className="primary-button" type="button" onClick={() => void searchPlayers()} disabled={isSearchingPlayers || !playerSearchTerm.trim()}>
+                          {isSearchingPlayers ? <LoaderCircle className="spin" size={15} /> : <Search size={15} />} Find players
+                        </button>
+                      </div>
+                      {isSearchingPlayers && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching public Rankedin profiles…</p>}
+                      {playerSearchError && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {playerSearchError}</p>}
+                      {!isSearchingPlayers && !playerSearchError && playerSearchTerm.trim() && !playerSearchResults.length && <p className="player-search-status">No public players matched that name.</p>}
+                      {!!playerSearchResults.length && (
+                        <div className="player-search-results" role="listbox" aria-label="Player search results">
+                          {playerSearchResults.map((player) => (
+                            <button className="player-search-result" type="button" role="option" key={player.rankedInId} onClick={() => selectPlayerSearchResult(player)}>
+                              <span className="player-search-result-name">{player.name}</span>
+                              <span className="player-search-result-id">{player.rankedInId}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              <p className="input-hint"><Info size={14} /> No login. No database. {activeMode === 'tournament' ? 'Paste a public tournament URL or ID to begin.' : 'Only finished public tournament results are charted.'}</p>
             </div>
             {(activeMode === 'tournament' ? error : playerError) && <div className="error-banner" role="alert"><CircleHelp size={16} /> {activeMode === 'tournament' ? error : playerError}</div>}
           </div>
@@ -1197,6 +1404,9 @@ function App() {
           </div>
           <div className="workspace-actions">
             {snapshot.source === 'preview' && <button className="text-button" type="button" onClick={() => void analyzeTournament()}><RefreshCw size={15} /> Refresh live data</button>}
+            <button className="text-button share-button" type="button" onClick={() => void copyShareLink()} disabled={snapshot.source !== 'live' || !tournamentUrl.trim()}>
+              {shareCopied ? <Check size={15} /> : <Copy size={15} />} {shareCopied ? 'Link copied' : 'Copy share link'}
+            </button>
             <a className="outline-button" href={`https://www.rankedin.com/en/tournament/${snapshot.tournamentId}`} target="_blank" rel="noreferrer">Open event <ArrowUpRight size={15} /></a>
           </div>
         </section>
@@ -1405,6 +1615,9 @@ function App() {
             isLoading={isAnalyzingPlayer}
             loadingStage={playerLoadingStage}
             historyLimit={PLAYER_PROGRESS_HISTORY_LIMIT}
+            onCopyShareLink={() => void copyShareLink()}
+            shareCopied={shareCopied}
+            canShare={Boolean(playerProfile && playerReference.trim())}
           />
         )}
       </main>

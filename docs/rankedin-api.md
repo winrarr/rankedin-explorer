@@ -9,6 +9,7 @@ The browser client uses the public base URL `https://api.rankedin.com/v1`. API a
 ## Read paths used by the app
 
 - `GET /Player/PlayerProfileInfoAsync?rankedinId=...&language=en` resolves a public `R...` profile ID to the numeric player ID used by event and result endpoints.
+- `GET /Search/GetPlayersByNameSimpleAsync?name=...&take=...&skip=...` returns compact public player search results with the numeric ID, display name and `R...` identifier.
 - `GET /Player/ParticipatedEventsAsync?PlayerId=...&Language=en&Skip=...&Take=...` returns a player's participated events. The app currently keeps finished tournament events (`State === 4` and `Type === 4`).
 - `GET /Tournament/GetheaderAsync?id=...&language=en` returns tournament metadata.
 - `GET /Tournament/GetStandingsAsync?id=...` returns the classes and ranking systems attached to an event.

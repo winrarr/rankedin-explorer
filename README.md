@@ -7,7 +7,7 @@ Rankedin Explorer is a personal, read-only GitHub Pages tool for exploring the c
 - How far did they get, who did they play and what were the scores?
 - How does the current field compare by historical skill rating?
 
-The first version supports two temporary analysis modes: tournament field exploration with class switching, player filtering and pair history; and single-player progress with a level/class placement timeline and source-linked results. It uses Rankedin's public API directly from the browser and does not require an account, backend or database.
+The first version supports two temporary analysis modes: tournament field exploration with class switching, player filtering and pair history; and single-player progress with a level/class placement timeline and source-linked results. Player Progress also includes public name search, and live analyses can be reopened or shared through query-string URLs. It uses Rankedin's public API directly from the browser and does not require an account, backend or database.
 
 ## Run locally
 
