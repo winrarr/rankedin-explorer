@@ -782,11 +782,6 @@ function leagueRecord(season: LeagueSeasonAnalysis) {
   return { wins, losses, played: wins + losses }
 }
 
-function leagueStanding(season: LeagueSeasonAnalysis) {
-  if (season.teamStanding === null) return 'Standing unavailable'
-  return `${ordinalPosition(season.teamStanding)} of ${season.teamCount ?? '—'} teams`
-}
-
 function leagueDateRange(season: LeagueSeasonAnalysis) {
   return `${formatCompactDate(season.startDate)} – ${formatCompactDate(season.endDate)}`
 }
@@ -802,6 +797,8 @@ type LeagueTimeScale = {
   plotWidth: number
   start: number
   end: number
+  dataStart: number
+  dataEnd: number
   range: number
 }
 
@@ -825,63 +822,10 @@ function leagueTimeScale(seasons: LeagueSeasonAnalysis[], chartWidth: number): L
     plotWidth: chartWidth - chartLeft - chartRight,
     start,
     end,
+    dataStart: rawStart,
+    dataEnd: rawEnd,
     range: Math.max(end - start, 1),
   }
-}
-
-function LeagueDivisionChart({ seasons, scale }: LeagueProgressChartProps & { scale: LeagueTimeScale }) {
-  const chartTop = 28
-  const chartBottom = 42
-  const rowHeight = 43
-  const chartHeight = chartTop + leagueDivisionScale.length * rowHeight + chartBottom
-  const xPosition = (value: string) => scale.chartLeft + ((dateTimestamp(value) - scale.start) / scale.range) * scale.plotWidth
-  const yPosition = (divisionName: string) => chartTop + leagueDivisionIndex(divisionName) * rowHeight + rowHeight / 2
-  const xTicks = [0, .5, 1]
-  const orderedSeasons = [...seasons].sort((first, second) => dateTimestamp(first.startDate) - dateTimestamp(second.startDate))
-
-  return (
-    <svg className="league-chart-svg" viewBox={`0 0 ${scale.chartWidth} ${chartHeight}`} role="img" aria-label="Lunar League division progression">
-        <title>Lunar League division progression</title>
-        {leagueDivisionScale.map((division, index) => {
-          const y = chartTop + index * rowHeight + rowHeight / 2
-          return (
-            <g key={division}>
-              <line className="league-grid-line" x1={scale.chartLeft} x2={scale.chartWidth - scale.chartRight} y1={y} y2={y} />
-              <text className="league-axis-label" x={scale.chartLeft - 12} y={y + 3} textAnchor="end">{division}</text>
-            </g>
-          )
-        })}
-        {xTicks.map((tick) => {
-          const timestamp = scale.start + scale.range * tick
-          return <text className="league-axis-label" key={tick} x={scale.chartLeft + scale.plotWidth * tick} y={chartHeight - 15} textAnchor={tick === 0 ? 'start' : tick === 1 ? 'end' : 'middle'}>{formatChartDate(new Date(timestamp).toISOString())}</text>
-        })}
-        <text className="league-axis-caption" x="15" y={chartTop - 9}>HIGHER DIVISION</text>
-        <line className="league-axis-line" x1={scale.chartLeft} x2={scale.chartLeft} y1={chartTop} y2={chartHeight - chartBottom} />
-        <line className="league-axis-line" x1={scale.chartLeft} x2={scale.chartWidth - scale.chartRight} y1={chartHeight - chartBottom} y2={chartHeight - chartBottom} />
-        {orderedSeasons.slice(1).map((season, index) => {
-          const previous = orderedSeasons[index]
-          if (leagueDivisionIndex(previous.divisionName) === leagueDivisionIndex(season.divisionName)) return null
-          const previousY = yPosition(previous.divisionName)
-          const currentY = yPosition(season.divisionName)
-          return <polyline className="league-connector" key={`${previous.id}-${season.id}`} points={`${xPosition(previous.endDate)},${previousY} ${xPosition(season.startDate)},${previousY} ${xPosition(season.startDate)},${currentY}`} />
-        })}
-        {orderedSeasons.map((season, index) => {
-          const color = ['#587866', '#1f6b82', '#d56e59', '#8b6f47'][index % 4]
-          const y = yPosition(season.divisionName)
-          const x = xPosition(season.endDate)
-          const finalSnapshot = season.standingHistory.at(-1)
-          const finalLabel = finalSnapshot ? `${ordinalPosition(finalSnapshot.standing)} / ${finalSnapshot.teamCount}` : season.teamStanding ? `${ordinalPosition(season.teamStanding)} / ${season.teamCount ?? '—'}` : 'standing —'
-          return (
-            <g key={season.id}>
-              <line className="league-season-band" x1={xPosition(season.startDate)} x2={xPosition(season.endDate)} y1={y} y2={y} stroke={color} />
-              <circle className="league-season-point" cx={x} cy={y} r="6" fill={color} />
-              <text className="league-season-label" x={x} y={y - 13} textAnchor="middle">{finalLabel}</text>
-              <title>{`${season.name} · ${season.regionName} · ${season.divisionName} · ${leagueStanding(season)}`}</title>
-            </g>
-          )
-        })}
-      </svg>
-  )
 }
 
 function leagueResultLabel(result: LeagueStandingSnapshot['result']) {
@@ -898,49 +842,120 @@ function leagueResultColor(result: LeagueStandingSnapshot['result']) {
   return '#8d9994'
 }
 
-function LeagueStandingChart({ seasons, scale }: LeagueProgressChartProps & { scale: LeagueTimeScale }) {
-  const chartTop = 24
-  const chartRight = 30
-  const chartBottom = 42
-  const chartLeft = 102
-  const rowHeight = 34
-  const teamCount = Math.max(...seasons.map((season) => season.teamCount ?? 0), 1)
-  const chartHeight = chartTop + teamCount * rowHeight + chartBottom
-  const xPosition = (value: string) => chartLeft + ((dateTimestamp(value) - scale.start) / scale.range) * (scale.chartWidth - chartLeft - chartRight)
-  const yPosition = (standing: number) => chartTop + (standing - 1) * rowHeight + rowHeight / 2
+function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { scale: LeagueTimeScale }) {
+  const chartTop = 28
+  const chartBottom = 48
+  const divisionHeight = 60
+  const rankInset = 14
+  const activeDivisionIndices = seasons.map((season) => leagueDivisionIndex(season.divisionName))
+  const firstVisibleDivision = Math.max(0, Math.min(...activeDivisionIndices) - 1)
+  const lastVisibleDivision = Math.min(leagueDivisionScale.length - 1, Math.max(...activeDivisionIndices) + 1)
+  const visibleDivisions = leagueDivisionScale.slice(firstVisibleDivision, lastVisibleDivision + 1)
+  const chartHeight = chartTop + visibleDivisions.length * divisionHeight + chartBottom
+  const xPosition = (value: string) => scale.chartLeft + ((dateTimestamp(value) - scale.start) / scale.range) * scale.plotWidth
+  const divisionTop = (divisionName: string) => chartTop + (leagueDivisionIndex(divisionName) - firstVisibleDivision) * divisionHeight
+  const divisionCenter = (divisionName: string) => divisionTop(divisionName) + divisionHeight / 2
+  const standingPosition = (divisionName: string, standing: number, teamCount: number) => {
+    const firstPlace = divisionTop(divisionName) + rankInset
+    const lastPlace = divisionTop(divisionName) + divisionHeight - rankInset
+    const progress = teamCount > 1 ? (standing - 1) / (teamCount - 1) : .5
+    return firstPlace + (lastPlace - firstPlace) * progress
+  }
   const xTicks = [0, .5, 1]
+  const dataRange = Math.max(scale.dataEnd - scale.dataStart, 1)
   const orderedSeasons = [...seasons].sort((first, second) => dateTimestamp(first.startDate) - dateTimestamp(second.startDate))
+  const colors = ['#587866', '#1f6b82', '#d56e59', '#8b6f47']
+  const seasonPaths = orderedSeasons.map((season, seasonIndex) => {
+    const points = [...season.standingHistory]
+      .sort((first, second) => dateTimestamp(first.date) - dateTimestamp(second.date))
+      .map((point) => ({
+        ...point,
+        x: xPosition(point.date),
+        y: standingPosition(season.divisionName, point.standing, point.teamCount),
+      }))
+    const finalSnapshot = points.at(-1)
+    const finalStanding = season.teamStanding ?? finalSnapshot?.standing ?? null
+    const finalTeamCount = season.teamCount ?? finalSnapshot?.teamCount ?? 1
+    const finalPoint = finalStanding === null ? null : {
+      x: xPosition(season.endDate),
+      y: standingPosition(season.divisionName, finalStanding, finalTeamCount),
+    }
+    const firstPoint = points[0] ?? finalPoint ?? { x: xPosition(season.startDate), y: divisionCenter(season.divisionName) }
+    const lastPoint = points.at(-1) ?? finalPoint ?? { x: xPosition(season.endDate), y: divisionCenter(season.divisionName) }
+    const endPoint = finalPoint ?? lastPoint
+    return {
+      season,
+      points,
+      color: colors[seasonIndex % colors.length],
+      finalPoint,
+      firstPoint,
+      lastPoint,
+      endPoint,
+      finalStanding,
+      finalTeamCount,
+      finalPositionChanged: finalStanding !== null && finalSnapshot?.standing !== finalStanding,
+    }
+  })
+  const divisionTeamCounts = new Map<number, number>()
+  seasonPaths.forEach(({ season, finalTeamCount }) => {
+    const divisionIndex = leagueDivisionIndex(season.divisionName)
+    divisionTeamCounts.set(divisionIndex, Math.max(divisionTeamCounts.get(divisionIndex) ?? 0, finalTeamCount))
+  })
 
   return (
-    <svg className="league-chart-svg league-standing-svg" viewBox={`0 0 ${scale.chartWidth} ${chartHeight}`} role="img" aria-label="Lunar League team standing progression">
-      <title>Lunar League team standing progression</title>
-      {Array.from({ length: teamCount }, (_, index) => {
-        const standing = index + 1
-        const y = yPosition(standing)
+    <svg className="league-chart-svg" viewBox={`0 0 ${scale.chartWidth} ${chartHeight}`} role="img" aria-label="Lunar League division and team standing progression">
+      <title>Lunar League division and team standing progression</title>
+      {visibleDivisions.map((division, index) => {
+        const top = chartTop + index * divisionHeight
+        const center = top + divisionHeight / 2
         return (
-          <g key={standing}>
-            <line className="league-grid-line" x1={chartLeft} x2={scale.chartWidth - chartRight} y1={y} y2={y} />
-            <text className="league-axis-label" x={chartLeft - 12} y={y + 3} textAnchor="end">{ordinalPosition(standing)}</text>
+          <g key={division}>
+            <rect className={`league-division-band${index % 2 ? ' is-alt' : ''}`} x={scale.chartLeft} y={top} width={scale.plotWidth} height={divisionHeight} />
+            <line className="league-division-boundary" x1={scale.chartLeft} x2={scale.chartWidth - scale.chartRight} y1={top} y2={top} />
+            <line className="league-grid-line" x1={scale.chartLeft} x2={scale.chartWidth - scale.chartRight} y1={center} y2={center} />
+            <text className="league-axis-label" x={scale.chartLeft - 12} y={center + 3} textAnchor="end">{division}</text>
           </g>
         )
       })}
       {xTicks.map((tick) => {
-        const timestamp = scale.start + scale.range * tick
-        return <text className="league-axis-label" key={tick} x={chartLeft + (scale.chartWidth - chartLeft - chartRight) * tick} y={chartHeight - 15} textAnchor={tick === 0 ? 'start' : tick === 1 ? 'end' : 'middle'}>{formatChartDate(new Date(timestamp).toISOString())}</text>
+        const timestamp = scale.dataStart + dataRange * tick
+        return <text className="league-axis-label" key={tick} x={scale.chartLeft + scale.plotWidth * tick} y={chartHeight - 15} textAnchor={tick === 0 ? 'start' : tick === 1 ? 'end' : 'middle'}>{formatChartDate(new Date(timestamp).toISOString())}</text>
       })}
-      <text className="league-axis-caption" x="15" y={chartTop - 9}>TEAM STANDING</text>
-      <line className="league-axis-line" x1={chartLeft} x2={chartLeft} y1={chartTop} y2={chartHeight - chartBottom} />
-      <line className="league-axis-line" x1={chartLeft} x2={scale.chartWidth - chartRight} y1={chartHeight - chartBottom} y2={chartHeight - chartBottom} />
-      {orderedSeasons.map((season, seasonIndex) => {
-        const points = [...season.standingHistory].sort((first, second) => dateTimestamp(first.date) - dateTimestamp(second.date))
-        const color = ['#587866', '#1f6b82', '#8b6f47', '#7b5b88'][seasonIndex % 4]
-        const linePoints = points.map((point) => `${xPosition(point.date)},${yPosition(point.standing)}`).join(' ')
+      <text className="league-axis-caption" x="15" y={chartTop - 9}>HIGHER DIVISION · BETTER RANK</text>
+      <line className="league-axis-line" x1={scale.chartLeft} x2={scale.chartLeft} y1={chartTop} y2={chartHeight - chartBottom} />
+      <line className="league-axis-line" x1={scale.chartLeft} x2={scale.chartWidth - scale.chartRight} y1={chartHeight - chartBottom} y2={chartHeight - chartBottom} />
+      {[...divisionTeamCounts.entries()].map(([divisionIndex, teamCount]) => {
+        const top = chartTop + (divisionIndex - firstVisibleDivision) * divisionHeight
+        return (
+          <g className="league-rank-guide" key={divisionIndex}>
+            <text x={scale.chartLeft + 8} y={top + rankInset + 3}>1st</text>
+            <text x={scale.chartLeft + 8} y={top + divisionHeight - rankInset + 3}>{ordinalPosition(teamCount)}</text>
+          </g>
+        )
+      })}
+      {seasonPaths.slice(1).map((current, index) => {
+        const previous = seasonPaths[index]
+        return <polyline className="league-connector" key={`${previous.season.id}-${current.season.id}`} points={`${previous.endPoint.x},${previous.endPoint.y} ${current.firstPoint.x},${previous.endPoint.y} ${current.firstPoint.x},${current.firstPoint.y}`} />
+      })}
+      {seasonPaths.map(({ season, points, color, finalPoint, finalStanding, finalTeamCount, finalPositionChanged }) => {
+        const linePoints = points.map((point) => `${point.x},${point.y}`).join(' ')
         return (
           <g key={season.id}>
+            <line className="league-season-rail" x1={xPosition(season.startDate)} x2={xPosition(season.endDate)} y1={divisionCenter(season.divisionName)} y2={divisionCenter(season.divisionName)} stroke={color} />
+            {finalStanding !== null && <>
+              <line className="league-rank-edge" x1={xPosition(season.startDate)} x2={xPosition(season.endDate)} y1={standingPosition(season.divisionName, 1, finalTeamCount)} y2={standingPosition(season.divisionName, 1, finalTeamCount)} />
+              <line className="league-rank-edge" x1={xPosition(season.startDate)} x2={xPosition(season.endDate)} y1={standingPosition(season.divisionName, finalTeamCount, finalTeamCount)} y2={standingPosition(season.divisionName, finalTeamCount, finalTeamCount)} />
+            </>}
             {points.length > 1 && <polyline className="league-standing-line" points={linePoints} stroke={color} />}
+            {finalPoint && <>
+              <circle className="league-season-end-point" cx={finalPoint.x} cy={finalPoint.y} r="5" fill={color} />
+              {finalPositionChanged && <text className="league-season-label" x={finalPoint.x} y={finalPoint.y - 11} textAnchor="middle">{ordinalPosition(finalStanding)} / {finalTeamCount}</text>}
+            </>}
             {points.map((point, pointIndex) => {
-              const x = xPosition(point.date)
-              const y = yPosition(point.standing)
+              const x = point.x
+              const y = point.y
+              const previousPoint = points[pointIndex - 1]
+              const positionChanged = pointIndex === 0 || point.standing !== previousPoint?.standing
               const resultColor = leagueResultColor(point.result)
               const marker = point.result === 'loss'
                 ? <rect className="league-standing-marker" x={x - 6} y={y - 6} width="12" height="12" rx="3" fill={resultColor} />
@@ -951,7 +966,7 @@ function LeagueStandingChart({ seasons, scale }: LeagueProgressChartProps & { sc
                 <g key={`${season.id}-${point.fixtureId}`}>
                   {marker}
                   <text className="league-standing-marker-label" x={x} y={y + 3} textAnchor="middle">{leagueResultLabel(point.result)}</text>
-                  {pointIndex === points.length - 1 && <text className="league-standing-final-label" x={x} y={y - 13} textAnchor="middle">{ordinalPosition(point.standing)} / {point.teamCount}</text>}
+                  {positionChanged && <text className="league-standing-rank-label" x={x} y={y - 11} textAnchor="middle">{point.standing} / {point.teamCount}</text>}
                   <title>{`${formatCompactDate(point.date)} · ${leagueResultLabel(point.result)} · ${point.teamScore ?? '—'}–${point.opponentScore ?? '—'} vs ${point.opponentTeam} · ${ordinalPosition(point.standing)} of ${point.teamCount}`}</title>
                 </g>
               )
@@ -979,12 +994,10 @@ function LeagueProgressChart({ seasons }: LeagueProgressChartProps) {
 
   return (
     <div className="league-chart-wrap">
-      <div className="league-chart-subheading"><strong>Division over time</strong><span>A division is a season segment; the endpoint shows the final table position.</span></div>
-      <LeagueDivisionChart seasons={seasons} scale={scale} />
-      <div className="league-chart-subheading"><strong>Team standing after each fixture</strong><span>Markers show the team result, so a lower point can still be a win if other teams moved ahead.</span></div>
-      <LeagueStandingChart seasons={seasons} scale={scale} />
+      <div className="league-chart-subheading"><strong>Division and table position</strong><span>Each division is a band; 1st is higher within the band.</span></div>
+      <LeagueCombinedChart seasons={seasons} scale={scale} />
       <div className="league-chart-legend">
-        <span><i className="progress-legend-dot" style={{ background: 'var(--sage)' }} /> Season division</span>
+        <span><i className="league-legend-rail" /> Season range</span>
         <span><i className="league-legend-step" /> Division change</span>
         <span><i className="league-result-marker league-result-marker-win">W</i> Win</span>
         <span><i className="league-result-marker league-result-marker-loss">L</i> Loss</span>
@@ -1009,7 +1022,7 @@ function LeagueProgressSection({ seasons, isLoading, error }: LeagueProgressSect
         <div>
           <div className="section-kicker">LUNAR LEAGUE PROGRESS</div>
           <h2>Follow the division path.</h2>
-          <p>Season bands show the division; the standing checkpoints show how the team moved through the table.</p>
+          <p>Each division is a band, with fixture checkpoints placed inside it according to the team’s table position.</p>
         </div>
         <span className="progress-card-direction">higher is stronger</span>
       </div>
@@ -1057,7 +1070,7 @@ function LeagueProgressSection({ seasons, isLoading, error }: LeagueProgressSect
               )
             })}
           </div>
-          <p className="league-chart-note"><Info size={14} /> Division is categorical, not a numeric rating. Standing checkpoints are calculated after the team’s own fixtures using all completed pool fixtures up to that point. Pool suffixes such as A/B and the region stay visible as context.</p>
+          <p className="league-chart-note"><Info size={14} /> Division is categorical, not a numeric rating. A dashed connector shows movement between seasons, while each checkpoint is calculated after the team’s own fixture using all completed pool fixtures up to that point.</p>
         </>
       )}
     </section>
