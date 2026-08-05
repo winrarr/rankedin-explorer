@@ -1099,15 +1099,6 @@ function App() {
     void analyzeTournament(String(tournament.id))
   }
 
-  function togglePlayerSearch() {
-    setShowPlayerSearch((open) => !open)
-    if (showPlayerSearch) {
-      setPlayerSearchTerm('')
-      setPlayerSearchResults([])
-      setPlayerSearchError(null)
-    }
-  }
-
   function clearReference() {
     if (activeMode === 'tournament') {
       setTournamentUrl('')
@@ -1460,22 +1451,23 @@ function App() {
               </div>
               {activeMode === 'player' && (
                 <div className="player-search" ref={playerSearchRef}>
-                  <button className="player-search-toggle" type="button" aria-expanded={showPlayerSearch} onClick={togglePlayerSearch}>
-                    <Search size={14} /> {showPlayerSearch ? 'Close player search' : 'Search Rankedin players by name'}
-                  </button>
+                  <div className="player-search-row">
+                    <div className="url-input-wrap">
+                      <Search size={16} />
+                      <input
+                        value={playerSearchTerm}
+                        onChange={(event) => {
+                          setPlayerSearchTerm(event.target.value)
+                          setShowPlayerSearch(true)
+                        }}
+                        onFocus={() => setShowPlayerSearch(true)}
+                        placeholder="Search Rankedin players by name"
+                        aria-label="Search Rankedin players by name"
+                      />
+                    </div>
+                  </div>
                   {showPlayerSearch && (
                     <div className="player-search-panel">
-                      <div className="player-search-row">
-                        <div className="url-input-wrap">
-                          <Search size={16} />
-                          <input
-                            value={playerSearchTerm}
-                            onChange={(event) => setPlayerSearchTerm(event.target.value)}
-                            placeholder="Search by player name"
-                            aria-label="Search Rankedin players by name"
-                          />
-                        </div>
-                      </div>
                       {isSearchingPlayers && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching public Rankedin profiles…</p>}
                       {playerSearchError && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {playerSearchError}</p>}
                       {!isSearchingPlayers && !playerSearchError && playerSearchTerm.trim().length >= 2 && !playerSearchResults.length && <p className="player-search-status">No public players matched that name.</p>}
