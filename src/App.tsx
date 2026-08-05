@@ -148,6 +148,30 @@ function placementField(event: PlayerEventAnalysis) {
   return event.fieldSize ? `of ${event.fieldSize} pairs` : 'field size unavailable'
 }
 
+function compactClassName(className: string | null) {
+  if (!className) return 'Class unavailable'
+  const cleanedName = className
+    .replace(/\s*\([^)]*\)/g, '')
+    .replace(/\s*-\s*(?:formiddag|eftermiddag|ftm|først til mølle).*$/i, '')
+    .replace(/\s*-\s*maks.*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const dpfMatch = cleanedName.match(/\bDPF\s*(\d+)\b/i)
+  if (!dpfMatch) return cleanedName
+
+  let gender: 'Mix' | 'Kvinder' | 'Herrer' | null = null
+  if (/\bmix\b/i.test(cleanedName)) gender = 'Mix'
+  if (!gender && /kvinder|kvinde|dame|women|woman/i.test(cleanedName)) gender = 'Kvinder'
+  if (!gender && /herrer|herre|men|male/i.test(cleanedName)) gender = 'Herrer'
+  if (!gender) return `DPF${dpfMatch[1]}`
+  if (gender === 'Mix') return `Mix DPF${dpfMatch[1]}`
+  return `DPF${dpfMatch[1]} ${gender}`
+}
+
+function fieldPlacementEvents(analysis: PlayerAnalysis | null) {
+  return analysis?.events.filter((event) => event.className).slice(0, 5) ?? []
+}
+
 function matchRecord(matches: PlayerEventAnalysis['matches']) {
   const wins = matches.filter((match) => match.won === true).length
   const losses = matches.filter((match) => match.won === false).length
@@ -334,6 +358,10 @@ function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isLoadingClass, setIsLoadingClass] = useState(false)
   const [isLoadingPair, setIsLoadingPair] = useState(false)
+  const [fieldPlacementSummaries, setFieldPlacementSummaries] = useState<Record<number, PlayerAnalysis | null>>({})
+  const [fieldPlacementsLoaded, setFieldPlacementsLoaded] = useState(false)
+  const [isLoadingFieldPlacements, setIsLoadingFieldPlacements] = useState(false)
+  const [fieldPlacementError, setFieldPlacementError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showPreferences, setShowPreferences] = useState(false)
 
@@ -366,6 +394,9 @@ function App() {
     setError(null)
     setSelectedPairId(null)
     setPairHistory(null)
+    setFieldPlacementSummaries({})
+    setFieldPlacementsLoaded(false)
+    setFieldPlacementError(null)
 
     try {
       const result = await getTournamentSnapshot(tournamentUrl)
@@ -390,6 +421,9 @@ function App() {
       setSnapshot((current) => ({ ...current, selectedClass: nextClass, participants, source: 'live' }))
       setSelectedPairId(null)
       setPairHistory(null)
+      setFieldPlacementSummaries({})
+      setFieldPlacementsLoaded(false)
+      setFieldPlacementError(null)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'This class could not be loaded.')
     } finally {
@@ -419,11 +453,44 @@ function App() {
     setIsLoadingPair(false)
   }
 
+  async function loadFieldPlacements() {
+    const players = snapshot.participants.flatMap((pair) => [pair.first, pair.second])
+    setIsLoadingFieldPlacements(true)
+    setFieldPlacementError(null)
+
+    const results = await Promise.allSettled(
+      players.map((player) => getPlayerAnalysis(player.id, 5)),
+    )
+    const summaries: Record<number, PlayerAnalysis | null> = {}
+    let failedCount = 0
+
+    results.forEach((result, index) => {
+      const player = players[index]
+      if (result.status === 'fulfilled') {
+        summaries[player.id] = { ...result.value, playerName: player.name }
+        return
+      }
+
+      summaries[player.id] = null
+      failedCount += 1
+    })
+
+    setFieldPlacementSummaries(summaries)
+    setFieldPlacementsLoaded(true)
+    if (failedCount) {
+      setFieldPlacementError(`${failedCount} player ${failedCount === 1 ? 'summary was' : 'summaries were'} unavailable.`)
+    }
+    setIsLoadingFieldPlacements(false)
+  }
+
   function resetToPreview() {
     setSnapshot(demoSnapshot)
     setTournamentUrl(DEFAULT_TOURNAMENT_URL)
     setSelectedPairId(null)
     setPairHistory(null)
+    setFieldPlacementSummaries({})
+    setFieldPlacementsLoaded(false)
+    setFieldPlacementError(null)
     setSearchTerm('')
     setError(null)
   }
@@ -598,11 +665,27 @@ function App() {
                 <h2>{classTitle}</h2>
                 <p>{snapshot.selectedClass.name.includes('(') ? snapshot.selectedClass.name.match(/\(([^)]+)\)/)?.[1] : 'Selected class'} <span className="muted-divider">/</span> {snapshot.participants.length} pairs visible</p>
               </div>
-              <div className="class-picker-wrap">
-                <select value={snapshot.selectedClass.id} onChange={(event) => void chooseClass(Number(event.target.value))} disabled={isLoadingClass} aria-label="Choose tournament class">
-                  {snapshot.classes.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
-                </select>
-                {isLoadingClass ? <LoaderCircle className="picker-loader spin" size={15} /> : <ChevronDown className="picker-chevron" size={15} />}
+              <div className="field-card-tools">
+                <button
+                  className="text-button placement-load-button"
+                  type="button"
+                  onClick={() => void loadFieldPlacements()}
+                  disabled={isLoadingFieldPlacements || !snapshot.participants.length}
+                >
+                  {isLoadingFieldPlacements ? <LoaderCircle className="spin" size={14} /> : <History size={14} />}
+                  {isLoadingFieldPlacements
+                    ? 'Reading placements…'
+                    : fieldPlacementsLoaded
+                      ? 'Refresh last 5 placements'
+                      : 'Load last 5 placements'}
+                </button>
+                <div className="class-picker-wrap">
+                  <select value={snapshot.selectedClass.id} onChange={(event) => void chooseClass(Number(event.target.value))} disabled={isLoadingClass || isLoadingFieldPlacements} aria-label="Choose tournament class">
+                    {snapshot.classes.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+                  </select>
+                  {isLoadingClass ? <LoaderCircle className="picker-loader spin" size={15} /> : <ChevronDown className="picker-chevron" size={15} />}
+                </div>
+                {fieldPlacementError && <span className="placement-load-note">{fieldPlacementError}</span>}
               </div>
             </div>
 
@@ -613,7 +696,7 @@ function App() {
 
             <div className="table-scroll">
               <table className="roster-table">
-                <thead><tr><th>PAIR</th><th>SKILL</th><th>RANK</th><th>FIELD SIGNAL</th><th aria-label="Actions" /></tr></thead>
+                <thead><tr><th>PAIR</th><th>LAST 5 PLACEMENTS</th><th>SKILL</th><th>RANK</th><th>FIELD SIGNAL</th><th aria-label="Actions" /></tr></thead>
                 <tbody>
                   {visibleParticipants.map((pair, index) => {
                     const rating = pairRating(pair)
@@ -626,6 +709,33 @@ function App() {
                             <div><strong>{pair.first.name}</strong><span>{pair.second.name}</span></div>
                           </button>
                         </td>
+                        <td>
+                          <div className="field-placement-cell">
+                            {[pair.first, pair.second].map((player) => {
+                              const summary = fieldPlacementSummaries[player.id]
+                              const events = fieldPlacementEvents(summary ?? null)
+                              return (
+                                <div className="field-placement-player" key={player.id}>
+                                  <span className="field-placement-player-name">{player.name}</span>
+                                  <span className="field-placement-tags">
+                                    {!fieldPlacementsLoaded && <span className="field-placement-muted">Not loaded</span>}
+                                    {fieldPlacementsLoaded && summary === null && <span className="field-placement-muted">Unavailable</span>}
+                                    {fieldPlacementsLoaded && summary && !events.length && <span className="field-placement-muted">No finished events</span>}
+                                    {events.map((event) => (
+                                      <span
+                                        className="field-placement-tag"
+                                        key={`${player.id}-${event.id}`}
+                                        title={`${event.name} · ${event.className ?? 'Class unavailable'}`}
+                                      >
+                                        {compactClassName(event.className)} {placementPosition(event)}/{event.fieldSize ?? '—'}
+                                      </span>
+                                    ))}
+                                  </span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </td>
                         <td><span className="rating-value">{formatRating(rating)}</span><span className="rating-caption">avg. start</span></td>
                         <td>{pair.ranking === null ? <span className="empty-value">not published</span> : pair.ranking}</td>
                         <td><span className={`signal-pill ${rating !== null && rating >= (averageRating ?? 0) ? 'signal-pill-strong' : ''}`}>{rating !== null && rating >= (averageRating ?? 0) ? 'above field avg.' : 'field baseline'}</span></td>
@@ -633,7 +743,7 @@ function App() {
                       </tr>
                     )
                   })}
-                  {!visibleParticipants.length && <tr><td colSpan={5} className="empty-table">No pairs match that search.</td></tr>}
+                  {!visibleParticipants.length && <tr><td colSpan={6} className="empty-table">No pairs match that search.</td></tr>}
                 </tbody>
               </table>
             </div>
