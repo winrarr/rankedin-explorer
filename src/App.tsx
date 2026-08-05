@@ -1390,42 +1390,44 @@ function App() {
               <label htmlFor={activeMode === 'tournament' ? 'tournament-url' : 'player-reference'}>
                 {activeMode === 'tournament' ? 'Start with a public tournament' : 'Start with a public Rankedin profile'}
               </label>
-              <div className="url-input-row">
-                <div className="url-input-wrap">
-                  {activeMode === 'tournament' ? <GitBranch size={17} /> : <UserRound size={17} />}
-                  <input
-                    id={activeMode === 'tournament' ? 'tournament-url' : 'player-reference'}
-                    value={activeMode === 'tournament' ? tournamentUrl : playerReference}
-                    onChange={(event) => activeMode === 'tournament' ? setTournamentUrl(event.target.value) : setPlayerReference(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') void (activeMode === 'tournament' ? analyzeTournament() : analyzePlayer())
-                    }}
-                    placeholder={activeMode === 'tournament' ? 'Search tournament name, URL or ID' : 'Paste a Rankedin profile URL or R-number'}
-                  />
-                  {(activeMode === 'tournament' ? tournamentUrl : playerReference) && <button className="clear-input" type="button" aria-label={`Clear ${activeMode} reference`} onClick={clearReference}><X size={14} /></button>}
+              <div className="reference-search-anchor">
+                <div className="url-input-row">
+                  <div className="url-input-wrap">
+                    {activeMode === 'tournament' ? <GitBranch size={17} /> : <UserRound size={17} />}
+                    <input
+                      id={activeMode === 'tournament' ? 'tournament-url' : 'player-reference'}
+                      value={activeMode === 'tournament' ? tournamentUrl : playerReference}
+                      onChange={(event) => activeMode === 'tournament' ? setTournamentUrl(event.target.value) : setPlayerReference(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') void (activeMode === 'tournament' ? analyzeTournament() : analyzePlayer())
+                      }}
+                      placeholder={activeMode === 'tournament' ? 'Search tournament name, URL or ID' : 'Paste a Rankedin profile URL or R-number'}
+                    />
+                    {(activeMode === 'tournament' ? tournamentUrl : playerReference) && <button className="clear-input" type="button" aria-label={`Clear ${activeMode} reference`} onClick={clearReference}><X size={14} /></button>}
+                  </div>
+                  <button className="primary-button" type="button" onClick={() => void (activeMode === 'tournament' ? analyzeTournament() : analyzePlayer())} disabled={activeMode === 'tournament' ? isAnalyzing || !tournamentUrl.trim() : isAnalyzingPlayer || !playerReference.trim()}>
+                    {(activeMode === 'tournament' ? isAnalyzing : isAnalyzingPlayer) ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}
+                    {(activeMode === 'tournament' ? isAnalyzing : isAnalyzingPlayer) ? 'Reading…' : activeMode === 'tournament' ? 'Analyze field' : 'Read progress'}
+                  </button>
                 </div>
-                <button className="primary-button" type="button" onClick={() => void (activeMode === 'tournament' ? analyzeTournament() : analyzePlayer())} disabled={activeMode === 'tournament' ? isAnalyzing || !tournamentUrl.trim() : isAnalyzingPlayer || !playerReference.trim()}>
-                  {(activeMode === 'tournament' ? isAnalyzing : isAnalyzingPlayer) ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}
-                  {(activeMode === 'tournament' ? isAnalyzing : isAnalyzingPlayer) ? 'Reading…' : activeMode === 'tournament' ? 'Analyze field' : 'Read progress'}
-                </button>
+                {activeMode === 'tournament' && !isDirectTournamentReference(tournamentUrl) && (
+                  <div className="tournament-search-panel" role="status">
+                    {isSearchingTournaments && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching public Rankedin tournaments…</p>}
+                    {tournamentSearchError && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {tournamentSearchError}</p>}
+                    {!isSearchingTournaments && !tournamentSearchError && tournamentUrl.trim().length >= 2 && !tournamentSearchResults.length && <p className="player-search-status">No public tournaments matched that name.</p>}
+                    {!!tournamentSearchResults.length && (
+                      <div className="tournament-search-results" role="listbox" aria-label="Tournament search results">
+                        {tournamentSearchResults.map((tournament) => (
+                          <button className="tournament-search-result" type="button" role="option" key={`${tournament.id}-${tournament.startDate}`} onClick={() => selectTournamentSearchResult(tournament)}>
+                            <span className="tournament-search-result-name">{tournament.name}</span>
+                            <span className="tournament-search-result-meta">{tournament.startDate || 'Date unavailable'} · {tournament.sport ?? 'Sport unavailable'}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              {activeMode === 'tournament' && !isDirectTournamentReference(tournamentUrl) && (
-                <div className="tournament-search-panel" role="status">
-                  {isSearchingTournaments && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching public Rankedin tournaments…</p>}
-                  {tournamentSearchError && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {tournamentSearchError}</p>}
-                  {!isSearchingTournaments && !tournamentSearchError && tournamentUrl.trim().length >= 2 && !tournamentSearchResults.length && <p className="player-search-status">No public tournaments matched that name.</p>}
-                  {!!tournamentSearchResults.length && (
-                    <div className="tournament-search-results" role="listbox" aria-label="Tournament search results">
-                      {tournamentSearchResults.map((tournament) => (
-                        <button className="tournament-search-result" type="button" role="option" key={`${tournament.id}-${tournament.startDate}`} onClick={() => selectTournamentSearchResult(tournament)}>
-                          <span className="tournament-search-result-name">{tournament.name}</span>
-                          <span className="tournament-search-result-meta">{tournament.startDate || 'Date unavailable'} · {tournament.sport ?? 'Sport unavailable'}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
               {activeMode === 'player' && (
                 <div className="player-search">
                   <button className="player-search-toggle" type="button" aria-expanded={showPlayerSearch} onClick={togglePlayerSearch}>
