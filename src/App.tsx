@@ -867,12 +867,15 @@ function App() {
   const [tournamentSearchResults, setTournamentSearchResults] = useState<TournamentSearchResult[]>([])
   const [isSearchingTournaments, setIsSearchingTournaments] = useState(false)
   const [tournamentSearchError, setTournamentSearchError] = useState<string | null>(null)
+  const [showTournamentSearch, setShowTournamentSearch] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
   const fieldPlacementRequestRef = useRef(0)
   const playerRequestRef = useRef(0)
   const playerSearchRequestRef = useRef(0)
   const tournamentSearchRequestRef = useRef(0)
   const lastAnalyzedTournamentReferenceRef = useRef('')
+  const playerSearchRef = useRef<HTMLDivElement>(null)
+  const tournamentSearchRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [showPreferences, setShowPreferences] = useState(false)
 
@@ -889,6 +892,17 @@ function App() {
       void analyzePlayer(initialLocation.playerReference)
     }
   }, [initialLocation])
+
+  useEffect(() => {
+    function closeSearchMenus(event: PointerEvent) {
+      if (!(event.target instanceof Node)) return
+      if (!playerSearchRef.current?.contains(event.target)) setShowPlayerSearch(false)
+      if (!tournamentSearchRef.current?.contains(event.target)) setShowTournamentSearch(false)
+    }
+
+    document.addEventListener('pointerdown', closeSearchMenus)
+    return () => document.removeEventListener('pointerdown', closeSearchMenus)
+  }, [])
 
   useEffect(() => {
     const normalizedTerm = playerSearchTerm.trim()
@@ -997,6 +1011,7 @@ function App() {
     if (!normalizedReference) return
 
     lastAnalyzedTournamentReferenceRef.current = normalizedReference
+    setShowTournamentSearch(false)
     fieldPlacementRequestRef.current += 1
     setIsAnalyzing(true)
     setError(null)
@@ -1096,11 +1111,13 @@ function App() {
   function clearReference() {
     if (activeMode === 'tournament') {
       setTournamentUrl('')
+      setShowTournamentSearch(false)
       updateSharedLocation({ mode: 'tournament' })
       return
     }
 
     setPlayerReference('')
+    setShowPlayerSearch(false)
     updateSharedLocation({ mode: 'player' })
   }
 
@@ -1243,6 +1260,7 @@ function App() {
     setIsAnalyzingPlayer(false)
     setPlayerLoadingStage(null)
     setShowPlayerSearch(false)
+    setShowTournamentSearch(false)
     setPlayerSearchTerm('')
     setPlayerSearchResults([])
     setPlayerSearchError(null)
@@ -1261,6 +1279,8 @@ function App() {
       setPlayerLoadingStage(null)
     }
     setActiveMode(nextMode)
+    setShowPlayerSearch(false)
+    setShowTournamentSearch(false)
     setError(null)
     setPlayerError(null)
     setShareCopied(false)
@@ -1390,14 +1410,24 @@ function App() {
               <label htmlFor={activeMode === 'tournament' ? 'tournament-url' : 'player-reference'}>
                 {activeMode === 'tournament' ? 'Start with a public tournament' : 'Start with a public Rankedin profile'}
               </label>
-              <div className="reference-search-anchor">
+              <div className="reference-search-anchor" ref={tournamentSearchRef}>
                 <div className="url-input-row">
                   <div className="url-input-wrap">
                     {activeMode === 'tournament' ? <GitBranch size={17} /> : <UserRound size={17} />}
                     <input
                       id={activeMode === 'tournament' ? 'tournament-url' : 'player-reference'}
                       value={activeMode === 'tournament' ? tournamentUrl : playerReference}
-                      onChange={(event) => activeMode === 'tournament' ? setTournamentUrl(event.target.value) : setPlayerReference(event.target.value)}
+                      onChange={(event) => {
+                        if (activeMode === 'tournament') {
+                          setTournamentUrl(event.target.value)
+                          setShowTournamentSearch(true)
+                        } else {
+                          setPlayerReference(event.target.value)
+                        }
+                      }}
+                      onFocus={() => {
+                        if (activeMode === 'tournament' && !isDirectTournamentReference(tournamentUrl)) setShowTournamentSearch(true)
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') void (activeMode === 'tournament' ? analyzeTournament() : analyzePlayer())
                       }}
@@ -1410,7 +1440,7 @@ function App() {
                     {(activeMode === 'tournament' ? isAnalyzing : isAnalyzingPlayer) ? 'Reading…' : activeMode === 'tournament' ? 'Analyze field' : 'Read progress'}
                   </button>
                 </div>
-                {activeMode === 'tournament' && !isDirectTournamentReference(tournamentUrl) && (
+                {activeMode === 'tournament' && showTournamentSearch && !isDirectTournamentReference(tournamentUrl) && (
                   <div className="tournament-search-panel" role="status">
                     {isSearchingTournaments && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching public Rankedin tournaments…</p>}
                     {tournamentSearchError && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {tournamentSearchError}</p>}
@@ -1429,7 +1459,7 @@ function App() {
                 )}
               </div>
               {activeMode === 'player' && (
-                <div className="player-search">
+                <div className="player-search" ref={playerSearchRef}>
                   <button className="player-search-toggle" type="button" aria-expanded={showPlayerSearch} onClick={togglePlayerSearch}>
                     <Search size={14} /> {showPlayerSearch ? 'Close player search' : 'Search Rankedin players by name'}
                   </button>
