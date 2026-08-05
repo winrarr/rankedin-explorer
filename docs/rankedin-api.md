@@ -12,6 +12,9 @@ The browser client uses the public base URL `https://api.rankedin.com/v1`. API a
 - `GET /Search/GetPlayersByNameSimpleAsync?name=...&take=...&skip=...` returns compact public player search results with the numeric ID, display name and `R...` identifier.
 - `GET /Search/GetTournamentsAsync?term=...&language=en&take=...&skip=...` returns public tournament suggestions with the event URL, name, date and sport.
 - `GET /Player/ParticipatedEventsAsync?PlayerId=...&Language=en&Skip=...&Take=...` returns a player's participated events. The app currently keeps finished tournament events (`State === 4` and `Type === 4`).
+- `GET /TeamLeague/GetHeaderAsync?id=...&language=en` and `GET /TeamLeague/GetTeamLeagueTeamDetailsAsync?teamLeagueId=...&participantId=...&language=en` resolve a player's Lunar League season and team without scanning every league pool.
+- `GET /TeamLeague/GetTeamLeagueTeamHomepageAsync?TeamId=...&Language=en` resolves the team's pool, while `GET /TeamLeague/GetTeamStandingsAsync?poolId=...&language=en` returns the team standing and `GET /TeamLeague/GetTeamMatchesAsync?teamId=...&language=en` returns the season fixtures.
+- `GET /TeamLeague/GetTeamLeagueTeamsMatchesAsync?teamMatchId=...&language=en` returns the individual doubles inside a team fixture. The app filters those matches by the selected player's numeric ID.
 - `GET /Tournament/GetheaderAsync?id=...&language=en` returns tournament metadata.
 - `GET /Tournament/GetStandingsAsync?id=...` returns the classes and ranking systems attached to an event.
 - `GET /Tournament/GetPlayersForClassAsync?tournamentId=...&tournamentClassId=...&language=en` returns the pairs in a class.
@@ -32,6 +35,6 @@ The implementation and endpoint-specific raw types live in [`src/lib/rankedin.ts
 
 ## Request discipline
 
-Keep requests read-only, bounded and cache-friendly. The API client has small in-memory response and event-analysis caches, a shared 15-request active limit, bounded retries for transient `429`/`503` responses, parallel player/event analysis, and cancels remaining class probes after it finds the player. A feature that loads a full player history must page deliberately rather than assuming that the first response contains every event. Long analyses should expose partial results as they arrive, with the newest events prioritized.
+Keep requests read-only, bounded and cache-friendly. The API client has small in-memory response, participated-event and event-analysis caches, a shared 25-request active limit, bounded retries for transient HTTP/network failures (including `Retry-After` handling), parallel player/event analysis, and cancels remaining class probes after it finds the player. Tournament and Lunar League analysis share one 50-event participated-history request per player. A feature that loads a full player history must page deliberately rather than assuming that the first response contains every event. Long analyses should expose partial results as they arrive.
 
 Do not add mutations, authentication, API secrets, a proxy or a database without an explicit product and architecture decision. If CORS or API availability changes, update [`docs/constraints.md`](./constraints.md) and record any consequential architecture change in [`docs/decisions/`](./decisions/).

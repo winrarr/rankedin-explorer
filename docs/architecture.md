@@ -37,10 +37,11 @@ src/lib/rankedin.ts  ── normalized domain types ──>  React view state
 
 1. Parse a public player profile URL or `R...` ID.
 2. Resolve the public ID to the API's numeric player ID and profile metadata.
-3. Load a bounded full-history window of participated events and keep finished tournament events.
-4. Locate each player's result by numeric participant ID across event classes.
-5. Normalize organizer-entered class labels for chart series while retaining raw labels in the result table.
-6. Derive placement percentage from standing and field size, using the midpoint for ranged standings.
+3. Load one bounded participated-event window and split it into finished tournament events and finished Lunar League seasons.
+4. Analyze tournament placements and league seasons in parallel. For tournaments, locate the player's result by numeric participant ID across event classes.
+5. For Lunar League, resolve the player's team directly, then load pool standing, team fixtures and individual doubles in parallel within the shared request queue.
+6. Normalize organizer-entered tournament class labels for chart series while retaining raw labels in the result table; keep league division names categorical and preserve region/pool suffixes as metadata.
+7. Derive tournament placement percentage from standing and field size, using the midpoint for ranged standings.
 
 Both modes render incomplete records honestly rather than treating missing data as zero.
 

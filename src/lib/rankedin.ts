@@ -98,6 +98,56 @@ export type PlayerAnalysis = {
   events: PlayerEventAnalysis[]
 }
 
+export type LeagueMatchAnalysis = {
+  id: number
+  date: string
+  round: number | null
+  partner: string
+  opponents: string[]
+  won: boolean | null
+  played: boolean
+  score: string
+}
+
+export type LeagueFixtureAnalysis = {
+  id: number
+  date: string
+  round: number | null
+  teamName: string
+  opponentTeam: string
+  teamScore: number | null
+  opponentScore: number | null
+  won: boolean | null
+  matches: LeagueMatchAnalysis[]
+}
+
+export type LeagueSeasonAnalysis = {
+  id: number
+  name: string
+  startDate: string
+  endDate: string
+  divisionName: string
+  regionName: string
+  teamId: number
+  teamName: string
+  teamUrl: string
+  poolId: number
+  teamStanding: number | null
+  teamCount: number | null
+  teamPoints: number | null
+  teamPlayed: number | null
+  teamWins: number | null
+  teamLosses: number | null
+  eventUrl: string
+  fixtures: LeagueFixtureAnalysis[]
+}
+
+export type PlayerLeagueAnalysis = {
+  playerId: number
+  playerName: string
+  seasons: LeagueSeasonAnalysis[]
+}
+
 type RawPlayer = {
   Id: number
   RankedinId: string
@@ -190,6 +240,104 @@ type RawEventsResponse = {
   TotalCount: number
 }
 
+type RawTeamLeagueHeader = {
+  Id: number
+  Name: string
+  StartDate: string
+  EndDate: string
+  EventUrl?: string
+}
+
+type RawLeagueTeamDetail = {
+  teamId: number
+  teamName: string
+  teamUrl: string
+  divisionName: string
+  regionName: string
+}
+
+type RawLeagueTeamHomepage = {
+  teamLeagueId: number
+  teamLeagueName: string
+  poolId: number
+  team: {
+    id: number
+    name: string
+  }
+}
+
+type RawTeamStanding = {
+  standing: number
+  participantUrl: string
+  participantName: string
+  matchPoints: number
+  played: number
+  wins: number
+  losses: number
+}
+
+type RawTeamStandingsResponse = {
+  scoresViewModels: RawTeamStanding[]
+}
+
+type RawLeagueFixtureSide = {
+  id: number
+  name: string
+  result: number | null
+  isWinner: boolean | null
+}
+
+type RawLeagueFixture = {
+  team1: RawLeagueFixtureSide
+  team2: RawLeagueFixtureSide
+  showResults: boolean
+  matchId: number
+  details?: {
+    time?: string
+    date?: string
+    round?: number
+  }
+}
+
+type RawTeamMatchesResponse = {
+  matches: RawLeagueFixture[]
+}
+
+type RawLeagueSide = {
+  name: string
+  player2Name: string
+  player1Id: number
+  player2Id: number
+}
+
+type RawLeagueDouble = {
+  id: number
+  date: string
+  challenger: RawLeagueSide
+  challenged: RawLeagueSide
+  matchResult?: {
+    score?: {
+      firstParticipantScore: number
+      secondParticipantScore: number
+      detailedScoring?: Array<{
+        firstParticipantScore: number
+        secondParticipantScore: number
+        loserTiebreak: number | null
+      }>
+      isFirstParticipantWinner: boolean
+    }
+    hasScore: boolean
+    isFirstParticipantWinner: boolean | null
+    isPlayed: boolean
+  }
+}
+
+type RawLeagueDoublesResponse = Array<{
+  matches?: {
+    matches?: RawLeagueDouble[]
+  }
+}>
+
 type RawResult = {
   Player1ParticipantId: number
   Player2ParticipantId: number
@@ -250,15 +398,17 @@ type RawMatchesResponse = {
 
 const responseCache = new Map<string, Promise<unknown>>()
 const eventAnalysisCache = new Map<string, Promise<PlayerEventAnalysis>>()
+const participatedEventsCache = new Map<number, Promise<RawEvent[]>>()
 type QueuedRequest = {
   cancelled: boolean
   run: () => void
 }
 
 const requestQueue: QueuedRequest[] = []
-const MAX_ACTIVE_REQUESTS = 15
+const MAX_ACTIVE_REQUESTS = 25
 const MAX_EVENT_ANALYSIS_CONCURRENCY = MAX_ACTIVE_REQUESTS
-const MAX_RETRY_ATTEMPTS = 3
+const MAX_RETRY_ATTEMPTS = 4
+const PARTICIPATED_EVENTS_TAKE = 50
 let activeRequestCount = 0
 
 function drainRequestQueue() {
@@ -301,11 +451,20 @@ function retryDelay(response: Response, attempt: number) {
   const retryAfter = response.headers.get('Retry-After')
   if (retryAfter) {
     const seconds = Number(retryAfter)
-    if (Number.isFinite(seconds)) return Math.min(5000, Math.max(250, seconds * 1000))
+    if (Number.isFinite(seconds)) return Math.min(30000, Math.max(250, seconds * 1000))
     const timestamp = Date.parse(retryAfter)
-    if (!Number.isNaN(timestamp)) return Math.min(5000, Math.max(250, timestamp - Date.now()))
+    if (!Number.isNaN(timestamp)) return Math.min(30000, Math.max(250, timestamp - Date.now()))
   }
-  return Math.min(5000, 500 * (2 ** attempt))
+  return Math.min(12000, 500 * (2 ** attempt) + Math.round(Math.random() * 250))
+}
+
+function isRetryableStatus(status: number) {
+  return status === 408 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504
+}
+
+function isRetryableError(error: unknown, signal?: AbortSignal) {
+  if (signal?.aborted) return false
+  return error instanceof TypeError || (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError'))
 }
 
 async function fetchJson(path: string, signal?: AbortSignal) {
@@ -314,14 +473,19 @@ async function fetchJson(path: string, signal?: AbortSignal) {
 
     const timeoutSignal = AbortSignal.timeout(12000)
     const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
-    const response = await fetch(`${API_BASE}${path}`, { signal: requestSignal })
-    if (response.ok) return response.json()
+    try {
+      const response = await fetch(`${API_BASE}${path}`, { signal: requestSignal })
+      if (response.ok) return response.json()
 
-    const canRetry = response.status === 429 || response.status === 503
-    if (!canRetry || attempt === MAX_RETRY_ATTEMPTS - 1) {
-      throw new Error(`Rankedin returned ${response.status} for ${path}`)
+      if (!isRetryableStatus(response.status) || attempt === MAX_RETRY_ATTEMPTS - 1) {
+        throw new Error(`Rankedin returned ${response.status} for ${path}`)
+      }
+      await waitForRetry(retryDelay(response, attempt), signal)
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Rankedin returned')) throw error
+      if (!isRetryableError(error, signal) || attempt === MAX_RETRY_ATTEMPTS - 1) throw error
+      await waitForRetry(Math.min(12000, 500 * (2 ** attempt) + Math.round(Math.random() * 250)), signal)
     }
-    await waitForRetry(retryDelay(response, attempt), signal)
   }
 
   throw new Error(`Rankedin request failed for ${path}`)
@@ -387,6 +551,33 @@ function query(params: Record<string, string | number | boolean | undefined>) {
   })
 
   return `?${search.toString()}`
+}
+
+function parseRankedinDate(value: string) {
+  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?$/)
+  if (!match) return new Date(value).getTime()
+  const [, day, month, year, hours = '00', minutes = '00'] = match
+  return new Date(`${year}-${month}-${day}T${hours}:${minutes}:00`).getTime()
+}
+
+function getPlayerParticipatedEvents(playerId: number) {
+  const cached = participatedEventsCache.get(playerId)
+  if (cached) return cached
+
+  const pending = request<RawEventsResponse>(
+    `/player/ParticipatedEventsAsync${query({
+      PlayerId: playerId,
+      Language: 'en',
+      Skip: 0,
+      Take: PARTICIPATED_EVENTS_TAKE,
+    })}`,
+  ).then((response) => response.Payload)
+  participatedEventsCache.set(playerId, pending)
+
+  pending.catch(() => {
+    if (participatedEventsCache.get(playerId) === pending) participatedEventsCache.delete(playerId)
+  })
+  return pending
 }
 
 async function mapWithConcurrency<T, R>(
@@ -755,6 +946,162 @@ async function analyzeEvent(event: RawEvent, playerId: number): Promise<PlayerEv
   }
 }
 
+function leagueSideHasPlayer(side: RawLeagueSide, playerId: number) {
+  return side.player1Id === playerId || side.player2Id === playerId
+}
+
+function leaguePartner(side: RawLeagueSide, playerId: number) {
+  return side.player1Id === playerId ? side.player2Name : side.name
+}
+
+function formatLeagueMatchScore(match: RawLeagueDouble) {
+  const score = match.matchResult?.score
+  if (!score) return 'No score'
+
+  const sets = score.detailedScoring?.map((set) => {
+    const tiebreak = set.loserTiebreak === null ? '' : ` (${set.loserTiebreak})`
+    return `${set.firstParticipantScore}-${set.secondParticipantScore}${tiebreak}`
+  })
+
+  return sets?.length ? sets.join('  ') : `${score.firstParticipantScore}-${score.secondParticipantScore}`
+}
+
+function normalizeLeagueMatch(match: RawLeagueDouble, playerId: number): LeagueMatchAnalysis | null {
+  const playerOnChallenger = leagueSideHasPlayer(match.challenger, playerId)
+  const playerOnChallenged = leagueSideHasPlayer(match.challenged, playerId)
+  if (!playerOnChallenger && !playerOnChallenged) return null
+
+  const currentSide = playerOnChallenger ? match.challenger : match.challenged
+  const opponentSide = playerOnChallenger ? match.challenged : match.challenger
+  const hasScore = match.matchResult?.hasScore ?? Boolean(match.matchResult?.score)
+  const winner = match.matchResult?.score?.isFirstParticipantWinner
+
+  return {
+    id: match.id,
+    date: match.date,
+    round: null,
+    partner: leaguePartner(currentSide, playerId),
+    opponents: [opponentSide.name, opponentSide.player2Name].filter(Boolean),
+    won: hasScore && winner !== undefined
+      ? playerOnChallenger ? winner : !winner
+      : null,
+    played: match.matchResult?.isPlayed ?? hasScore,
+    score: formatLeagueMatchScore(match),
+  }
+}
+
+function normalizeLeagueFixture(fixture: RawLeagueFixture, teamId: number): LeagueFixtureAnalysis | null {
+  if (fixture.team1.id !== teamId && fixture.team2.id !== teamId) return null
+  const teamIsFirst = fixture.team1.id === teamId
+  const team = teamIsFirst ? fixture.team1 : fixture.team2
+  const opponent = teamIsFirst ? fixture.team2 : fixture.team1
+  if (!team || !opponent) return null
+
+  return {
+    id: fixture.matchId,
+    date: fixture.details?.time ?? fixture.details?.date ?? '',
+    round: fixture.details?.round ?? null,
+    teamName: team.name,
+    opponentTeam: opponent.name,
+    teamScore: team.result,
+    opponentScore: opponent.result,
+    won: fixture.showResults && team.isWinner !== null ? team.isWinner : null,
+    matches: [],
+  }
+}
+
+async function enrichLeagueFixture(fixture: LeagueFixtureAnalysis, playerId: number) {
+  try {
+    const response = await request<RawLeagueDoublesResponse>(
+      `/teamleague/GetTeamLeagueTeamsMatchesAsync${query({ teamMatchId: fixture.id, language: 'en' })}`,
+    )
+    const matches = response.flatMap((group) => group.matches?.matches ?? [])
+      .map((match) => normalizeLeagueMatch(match, playerId))
+      .filter((match): match is LeagueMatchAnalysis => match !== null)
+      .map((match) => ({ ...match, round: fixture.round }))
+
+    return { ...fixture, matches }
+  } catch {
+    return fixture
+  }
+}
+
+async function analyzeLeagueTeam(
+  event: RawTeamLeagueHeader,
+  detail: RawLeagueTeamDetail,
+  playerId: number,
+): Promise<LeagueSeasonAnalysis | null> {
+  try {
+    const [homepage, teamMatches] = await Promise.all([
+      request<RawLeagueTeamHomepage>(
+        `/teamleague/GetTeamLeagueTeamHomepageAsync${query({ TeamId: detail.teamId, Language: 'en' })}`,
+      ),
+      request<RawTeamMatchesResponse>(
+        `/teamleague/GetTeamMatchesAsync${query({ teamId: detail.teamId, language: 'en' })}`,
+      ),
+    ])
+    const standings = await request<RawTeamStandingsResponse>(
+      `/teamleague/GetTeamStandingsAsync${query({ poolId: homepage.poolId, language: 'en' })}`,
+    )
+    const teamStanding = standings.scoresViewModels.find((standing) => (
+      standing.participantUrl.includes(`/${detail.teamId}`) || standing.participantName === detail.teamName
+    ))
+    const fixtures = teamMatches.matches
+      .map((fixture) => normalizeLeagueFixture(fixture, detail.teamId))
+      .filter((fixture): fixture is LeagueFixtureAnalysis => fixture !== null)
+      .sort((first, second) => parseRankedinDate(first.date) - parseRankedinDate(second.date))
+    const enrichedFixtures = await mapWithConcurrency(
+      fixtures,
+      MAX_EVENT_ANALYSIS_CONCURRENCY,
+      (fixture) => enrichLeagueFixture(fixture, playerId),
+    )
+
+    return {
+      id: event.Id,
+      name: event.Name,
+      startDate: event.StartDate,
+      endDate: event.EndDate,
+      divisionName: detail.divisionName,
+      regionName: detail.regionName,
+      teamId: detail.teamId,
+      teamName: detail.teamName,
+      teamUrl: detail.teamUrl,
+      poolId: homepage.poolId,
+      teamStanding: teamStanding?.standing ?? null,
+      teamCount: standings.scoresViewModels.length || null,
+      teamPoints: teamStanding?.matchPoints ?? null,
+      teamPlayed: teamStanding?.played ?? null,
+      teamWins: teamStanding?.wins ?? null,
+      teamLosses: teamStanding?.losses ?? null,
+      eventUrl: event.EventUrl ?? `/en/teamleague/${event.Id}`,
+      fixtures: enrichedFixtures,
+    }
+  } catch {
+    return null
+  }
+}
+
+async function analyzeLeagueSeason(event: RawEvent, playerId: number) {
+  const [header, details] = await Promise.all([
+    request<RawTeamLeagueHeader>(
+      `/teamleague/GetHeaderAsync${query({ id: event.Id, language: 'en' })}`,
+    ),
+    request<RawLeagueTeamDetail[]>(
+      `/teamleague/GetTeamLeagueTeamDetailsAsync${query({
+        teamLeagueId: event.Id,
+        participantId: playerId,
+        language: 'en',
+      })}`,
+    ),
+  ])
+  const uniqueDetails = Array.from(new Map(details.map((detail) => [detail.teamId, detail])).values())
+  return mapWithConcurrency(
+    uniqueDetails,
+    MAX_EVENT_ANALYSIS_CONCURRENCY,
+    (detail) => analyzeLeagueTeam(header, detail, playerId),
+  )
+}
+
 function cachedEventAnalysis(event: RawEvent, playerId: number) {
   const cacheKey = `${playerId}:${event.Id}`
   const cached = eventAnalysisCache.get(cacheKey)
@@ -770,29 +1117,47 @@ export async function getPlayerAnalysis(
   maxEvents = 10,
   onEvent?: (event: PlayerEventAnalysis) => void,
 ): Promise<PlayerAnalysis> {
-  const response = await request<RawEventsResponse>(
-    `/player/ParticipatedEventsAsync${query({
-      PlayerId: playerId,
-      Language: 'en',
-      Skip: 0,
-      Take: Math.max(maxEvents + 5, 30),
-    })}`,
-  )
-  const finishedEvents = response.Payload
+  const events = await getPlayerParticipatedEvents(playerId)
+  const finishedEvents = events
     .filter((event) => event.State === FINISHED_EVENT_STATE && event.Type === 4)
     .slice(0, maxEvents)
-  const recentEvents = finishedEvents.slice(0, Math.min(10, maxEvents))
-  const olderEvents = finishedEvents.slice(recentEvents.length)
-  async function analyzeEvents(events: RawEvent[]) {
-    return mapWithConcurrency(events, MAX_EVENT_ANALYSIS_CONCURRENCY, async (event) => {
-      const analysis = await cachedEventAnalysis(event, playerId)
-      onEvent?.(analysis)
-      return analysis
-    })
+  const analyses = await mapWithConcurrency(finishedEvents, MAX_EVENT_ANALYSIS_CONCURRENCY, async (event) => {
+    const analysis = await cachedEventAnalysis(event, playerId)
+    onEvent?.(analysis)
+    return analysis
+  })
+
+  return { playerId, playerName: 'Selected player', events: analyses }
+}
+
+export async function getPlayerLeagueAnalysis(
+  playerId: number,
+  maxSeasons = 10,
+  onSeason?: (season: LeagueSeasonAnalysis) => void,
+): Promise<PlayerLeagueAnalysis> {
+  const events = await getPlayerParticipatedEvents(playerId)
+  const finishedLeagueEvents = events
+    .filter((event) => event.State === FINISHED_EVENT_STATE && event.Type === 3)
+    .slice(0, maxSeasons)
+  const seasons = await mapWithConcurrency(
+    finishedLeagueEvents,
+    MAX_EVENT_ANALYSIS_CONCURRENCY,
+    async (event) => {
+      try {
+        const analyses = await analyzeLeagueSeason(event, playerId)
+        analyses.forEach((season) => {
+          if (season) onSeason?.(season)
+        })
+        return analyses
+      } catch {
+        return []
+      }
+    },
+  )
+
+  return {
+    playerId,
+    playerName: 'Selected player',
+    seasons: seasons.flatMap((items) => items).filter((season): season is LeagueSeasonAnalysis => season !== null),
   }
-
-  const recentAnalyses = await analyzeEvents(recentEvents)
-  const olderAnalyses = await analyzeEvents(olderEvents)
-
-  return { playerId, playerName: 'Selected player', events: [...recentAnalyses, ...olderAnalyses] }
 }

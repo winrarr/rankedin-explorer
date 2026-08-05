@@ -27,6 +27,7 @@ import {
   getEventMatches,
   getClassParticipants,
   getPlayerAnalysis,
+  getPlayerLeagueAnalysis,
   getPlayerProfile,
   searchPlayersByName,
   searchTournamentsByName,
@@ -35,6 +36,8 @@ import {
   type PairRecord,
   type PlayerAnalysis,
   type PlayerEventAnalysis,
+  type PlayerLeagueAnalysis,
+  type LeagueSeasonAnalysis,
   type PlayerProfile,
   type PlayerRecord,
   type PlayerSearchResult,
@@ -193,7 +196,10 @@ function formatRating(value: number | null) {
 }
 
 function formatCompactDate(value: string) {
-  const date = new Date(value)
+  const rankedInDate = value.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?$/)
+  const date = rankedInDate
+    ? new Date(`${rankedInDate[3]}-${rankedInDate[2]}-${rankedInDate[1]}T${rankedInDate[4] ?? '00'}:${rankedInDate[5] ?? '00'}:00`)
+    : new Date(value)
   if (Number.isNaN(date.getTime())) return 'Unknown date'
   return new Intl.DateTimeFormat('en-GB', {
     day: '2-digit',
@@ -733,19 +739,222 @@ function ProgressChart({ series }: ProgressChartProps) {
   )
 }
 
+const leagueDivisionScale = [
+  'Elitedivision',
+  '1. Division',
+  '2. Division',
+  'Danmarksserie',
+  'Serie 1',
+  'Serie 2',
+  'Serie 3',
+  'Serie 4',
+  'Serie 5',
+]
+
+function leagueDivisionLabel(value: string) {
+  return value.replace(/\s*-\s*[A-Z]\s*$/i, '').trim() || value
+}
+
+function leagueDivisionIndex(value: string) {
+  const label = leagueDivisionLabel(value).toLowerCase()
+  if (label.includes('elite')) return 0
+  if (/^1\.\s*division/.test(label)) return 1
+  if (/^2\.\s*division/.test(label)) return 2
+  if (label.includes('danmarksserie')) return 3
+  const serie = label.match(/^serie\s+(\d+)/)
+  if (serie) return Math.min(8, 3 + Number(serie[1]))
+  return leagueDivisionScale.length - 1
+}
+
+function leagueSeasonMatches(season: LeagueSeasonAnalysis) {
+  return season.fixtures.flatMap((fixture) => fixture.matches)
+}
+
+function leagueRecord(season: LeagueSeasonAnalysis) {
+  const matches = leagueSeasonMatches(season)
+  const wins = matches.filter((match) => match.won === true).length
+  const losses = matches.filter((match) => match.won === false).length
+  return { wins, losses, played: wins + losses }
+}
+
+function leagueStanding(season: LeagueSeasonAnalysis) {
+  if (season.teamStanding === null) return 'Standing unavailable'
+  return `${ordinalPosition(season.teamStanding)} of ${season.teamCount ?? '—'} teams`
+}
+
+function leagueDateRange(season: LeagueSeasonAnalysis) {
+  return `${formatCompactDate(season.startDate)} – ${formatCompactDate(season.endDate)}`
+}
+
+type LeagueProgressChartProps = {
+  seasons: LeagueSeasonAnalysis[]
+}
+
+function LeagueProgressChart({ seasons }: LeagueProgressChartProps) {
+  const [isCompact, setIsCompact] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 620)
+  const chartWidth = isCompact ? 680 : 930
+  const chartTop = 28
+  const chartRight = 30
+  const chartBottom = 48
+  const chartLeft = 102
+  const rowHeight = 43
+  const chartHeight = chartTop + leagueDivisionScale.length * rowHeight + chartBottom
+  const plotWidth = chartWidth - chartLeft - chartRight
+  const timestamps = seasons.flatMap((season) => [
+    new Date(season.startDate).getTime(),
+    new Date(season.endDate).getTime(),
+  ]).filter((value) => !Number.isNaN(value))
+  const rawStart = timestamps.length ? Math.min(...timestamps) : Date.now()
+  const rawEnd = timestamps.length ? Math.max(...timestamps) : Date.now()
+  const datePadding = rawStart === rawEnd ? 1000 * 60 * 60 * 24 * 30 : 1000 * 60 * 60 * 24 * 12
+  const start = rawStart - datePadding
+  const end = rawEnd + datePadding
+  const range = Math.max(end - start, 1)
+  const xPosition = (value: string) => chartLeft + ((new Date(value).getTime() - start) / range) * plotWidth
+  const yPosition = (divisionName: string) => chartTop + leagueDivisionIndex(divisionName) * rowHeight + rowHeight / 2
+  const xTicks = [0, .5, 1]
+  const orderedSeasons = [...seasons].sort((first, second) => new Date(first.startDate).getTime() - new Date(second.startDate).getTime())
+
+  useEffect(() => {
+    function updateChartWidth() {
+      setIsCompact(window.innerWidth <= 620)
+    }
+
+    window.addEventListener('resize', updateChartWidth)
+    return () => window.removeEventListener('resize', updateChartWidth)
+  }, [])
+
+  return (
+    <div className="league-chart-wrap">
+      <svg className="league-chart-svg" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="Lunar League division progression">
+        <title>Lunar League division progression</title>
+        {leagueDivisionScale.map((division, index) => {
+          const y = chartTop + index * rowHeight + rowHeight / 2
+          return (
+            <g key={division}>
+              <line className="league-grid-line" x1={chartLeft} x2={chartWidth - chartRight} y1={y} y2={y} />
+              <text className="league-axis-label" x={chartLeft - 12} y={y + 3} textAnchor="end">{division}</text>
+            </g>
+          )
+        })}
+        {xTicks.map((tick) => {
+          const timestamp = start + (end - start) * tick
+          return <text className="league-axis-label" key={tick} x={chartLeft + plotWidth * tick} y={chartHeight - 15} textAnchor={tick === 0 ? 'start' : tick === 1 ? 'end' : 'middle'}>{formatChartDate(new Date(timestamp).toISOString())}</text>
+        })}
+        <text className="league-axis-caption" x="15" y={chartTop - 9}>HIGHER DIVISION</text>
+        <line className="league-axis-line" x1={chartLeft} x2={chartLeft} y1={chartTop} y2={chartHeight - chartBottom} />
+        <line className="league-axis-line" x1={chartLeft} x2={chartWidth - chartRight} y1={chartHeight - chartBottom} y2={chartHeight - chartBottom} />
+        {orderedSeasons.slice(1).map((season, index) => {
+          const previous = orderedSeasons[index]
+          const previousY = yPosition(previous.divisionName)
+          const currentY = yPosition(season.divisionName)
+          return <polyline className="league-connector" key={`${previous.id}-${season.id}`} points={`${xPosition(previous.endDate)},${previousY} ${xPosition(season.startDate)},${previousY} ${xPosition(season.startDate)},${currentY}`} />
+        })}
+        {orderedSeasons.map((season, index) => {
+          const color = ['#587866', '#1f6b82', '#d56e59', '#8b6f47'][index % 4]
+          const y = yPosition(season.divisionName)
+          const midpoint = (new Date(season.startDate).getTime() + new Date(season.endDate).getTime()) / 2
+          const x = chartLeft + ((midpoint - start) / range) * plotWidth
+          return (
+            <g key={season.id}>
+              <line className="league-season-band" x1={xPosition(season.startDate)} x2={xPosition(season.endDate)} y1={y} y2={y} stroke={color} />
+              <circle className="league-season-point" cx={x} cy={y} r="7" fill={color} />
+              <text className="league-season-label" x={x} y={y - 13} textAnchor="middle">{season.teamStanding ? `${ordinalPosition(season.teamStanding)} / ${season.teamCount ?? '—'}` : 'standing —'}</text>
+              <title>{`${season.name} · ${season.regionName} · ${season.divisionName} · ${leagueStanding(season)}`}</title>
+            </g>
+          )
+        })}
+      </svg>
+      <div className="league-chart-legend"><span><i className="progress-legend-dot" style={{ background: 'var(--sage)' }} /> Season division</span><span><i className="league-legend-step" /> Promotion / relegation path</span></div>
+    </div>
+  )
+}
+
+type LeagueProgressSectionProps = {
+  seasons: LeagueSeasonAnalysis[]
+  isLoading: boolean
+  error: string | null
+}
+
+function LeagueProgressSection({ seasons, isLoading, error }: LeagueProgressSectionProps) {
+  if (!seasons.length && !isLoading && !error) return null
+
+  return (
+    <section className="field-card league-progress-card" aria-label="Lunar League progress">
+      <div className="card-heading">
+        <div>
+          <div className="section-kicker">LUNAR LEAGUE PROGRESS</div>
+          <h2>Follow the division path.</h2>
+          <p>Season bands show where the player competed; the step path shows promotion or relegation between seasons.</p>
+        </div>
+        <span className="progress-card-direction">higher is stronger</span>
+      </div>
+      {isLoading && !seasons.length && <div className="league-loading"><LoaderCircle className="spin" size={15} /> Reading finished league seasons…</div>}
+      {error && <p className="league-error"><CircleHelp size={14} /> {error}</p>}
+      {!!seasons.length && (
+        <>
+          <LeagueProgressChart seasons={seasons} />
+          <div className="league-season-grid">
+            {seasons.map((season) => {
+              const record = leagueRecord(season)
+              const fixtureWins = season.fixtures.filter((fixture) => fixture.won === true).length
+              const fixtureLosses = season.fixtures.filter((fixture) => fixture.won === false).length
+              return (
+                <article className="league-season-card" key={`${season.id}-${season.teamId}`}>
+                  <div className="league-season-card-top">
+                    <div>
+                      <div className="league-season-name">{season.name}</div>
+                      <div className="league-season-division">{season.regionName} · {season.divisionName}</div>
+                    </div>
+                    <span className="league-season-date">{leagueDateRange(season)}</span>
+                  </div>
+                  <div className="league-season-card-main">
+                    <strong>{season.teamStanding ? ordinalPosition(season.teamStanding) : '—'}</strong>
+                    <span>of {season.teamCount ?? '—'} teams</span>
+                  </div>
+                  <a className="league-team-link" href={`https://www.rankedin.com${season.teamUrl}`} target="_blank" rel="noreferrer">{season.teamName} <ArrowUpRight size={12} /></a>
+                  <div className="league-season-stats">
+                    <span><strong>{fixtureWins}–{fixtureLosses}</strong><small>team fixtures</small></span>
+                    <span><strong>{record.wins}–{record.losses}</strong><small>player doubles</small></span>
+                    <span><strong>{season.teamPoints ?? '—'}</strong><small>match points</small></span>
+                  </div>
+                  <details className="league-fixtures">
+                    <summary><span>{season.fixtures.length} team fixtures</span><span>{record.played} individual appearances</span></summary>
+                    <div className="league-fixture-list">
+                      {season.fixtures.map((fixture) => (
+                        <div className="league-fixture" key={fixture.id}>
+                          <span className={`league-fixture-result ${fixture.won === true ? 'win' : fixture.won === false ? 'loss' : ''}`}>{fixture.won === true ? 'W' : fixture.won === false ? 'L' : '—'}</span>
+                          <span className="league-fixture-info"><strong>{formatCompactDate(fixture.date)} · round {fixture.round ?? '—'}</strong><span>vs {fixture.opponentTeam} · {fixture.teamScore ?? '—'}–{fixture.opponentScore ?? '—'} · {fixture.matches.length} personal {fixture.matches.length === 1 ? 'match' : 'matches'}</span></span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                </article>
+              )
+            })}
+          </div>
+          <p className="league-chart-note"><Info size={14} /> Division is categorical, not a numeric rating. Pool suffixes such as A/B and the region stay visible because they describe context rather than a separate vertical level.</p>
+        </>
+      )}
+    </section>
+  )
+}
+
 type PlayerProgressWorkspaceProps = {
   profile: PlayerProfile | null
   analysis: PlayerAnalysis | null
+  leagueAnalysis: PlayerLeagueAnalysis | null
+  leagueError: string | null
+  isLoadingLeague: boolean
   error: string | null
   isLoading: boolean
   loadingStage: 'profile' | 'history' | null
-  historyLimit: number
   onCopyShareLink: () => void
   shareCopied: boolean
   canShare: boolean
 }
 
-function PlayerProgressWorkspace({ profile, analysis, error, isLoading, loadingStage, historyLimit, onCopyShareLink, shareCopied, canShare }: PlayerProgressWorkspaceProps) {
+function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueError, isLoadingLeague, error, isLoading, loadingStage, onCopyShareLink, shareCopied, canShare }: PlayerProgressWorkspaceProps) {
   const series = useMemo(() => progressSeries(analysis?.events ?? []), [analysis])
   const points = useMemo(() => series.flatMap((item) => item.points), [series])
   const latestPoint = [...points].sort((first, second) => (
@@ -777,17 +986,17 @@ function PlayerProgressWorkspace({ profile, analysis, error, isLoading, loadingS
       {isLoading && !analysis && (
         <section className="progress-empty-card">
           <div className="trace-empty-icon"><LoaderCircle className="spin" size={21} /></div>
-          <h3>{loadingStage === 'profile' ? 'Finding the public profile' : 'Reading finished tournament history'}</h3>
+          <h3>{loadingStage === 'profile' ? 'Finding the public profile' : 'Reading finished player history'}</h3>
           <p>{loadingStage === 'profile'
             ? 'The profile is being resolved before its tournament history is checked.'
-            : 'Rankedin is checking the latest finished events for their class, placement and field size.'}</p>
+            : 'Rankedin is checking tournament placements and Lunar League seasons in parallel.'}</p>
         </section>
       )}
 
       {isLoading && analysis && (
         <div className="progress-loading-strip" aria-live="polite">
           <LoaderCircle className="spin" size={15} />
-          <span>{loadingStage === 'history' ? `Reading history · ${analysis.events.length} of the latest ${historyLimit} events found so far` : 'Resolving public profile'}</span>
+          <span>{loadingStage === 'history' ? `Reading history · ${analysis.events.length} tournament results · ${leagueAnalysis?.seasons.length ?? 0} league seasons found so far` : 'Resolving public profile'}</span>
         </div>
       )}
 
@@ -837,6 +1046,12 @@ function PlayerProgressWorkspace({ profile, analysis, error, isLoading, loadingS
             <ProgressChart series={series} />
             <p className="progress-chart-note"><Info size={14} /> Placement percentage is standing divided by the finished field size. Solid lines connect results within the same normalized class; dotted lines show their linear direction and are not forecasts.</p>
           </section>
+
+          <LeagueProgressSection
+            seasons={leagueAnalysis?.seasons ?? []}
+            isLoading={isLoadingLeague}
+            error={leagueError}
+          />
 
           <section className="progress-series-grid" aria-label="Progress by level and class">
             {series.map((item, index) => {
@@ -897,9 +1112,12 @@ function App() {
   const [playerReference, setPlayerReference] = useState(initialLocation.playerReference)
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null)
   const [playerAnalysis, setPlayerAnalysis] = useState<PlayerAnalysis | null>(null)
+  const [playerLeagueAnalysis, setPlayerLeagueAnalysis] = useState<PlayerLeagueAnalysis | null>(null)
   const [isAnalyzingPlayer, setIsAnalyzingPlayer] = useState(false)
+  const [isLoadingLeague, setIsLoadingLeague] = useState(false)
   const [playerLoadingStage, setPlayerLoadingStage] = useState<'profile' | 'history' | null>(null)
   const [playerError, setPlayerError] = useState<string | null>(null)
+  const [playerLeagueError, setPlayerLeagueError] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<TournamentSnapshot>(demoSnapshot)
   const [selectedPairId, setSelectedPairId] = useState<string | null>(null)
   const [pairHistory, setPairHistory] = useState<{
@@ -1119,10 +1337,13 @@ function App() {
     setIsAnalyzingPlayer(true)
     setPlayerLoadingStage('profile')
     setPlayerError(null)
+    setPlayerLeagueError(null)
     setShowPlayerSearch(false)
     setShareCopied(false)
     setPlayerProfile(null)
     setPlayerAnalysis(null)
+    setPlayerLeagueAnalysis(null)
+    setIsLoadingLeague(false)
     setPlayerReference(normalizedReference)
     updateSharedLocation({ mode: 'player', player: normalizedReference })
 
@@ -1132,26 +1353,49 @@ function App() {
       updateSharedLocation({ mode: 'player', player: profile.rankedInId })
       setPlayerProfile(profile)
       setPlayerAnalysis({ playerId: profile.id, playerName: profile.name, events: [] })
+      setPlayerLeagueAnalysis({ playerId: profile.id, playerName: profile.name, seasons: [] })
+      setIsLoadingLeague(true)
       setPlayerLoadingStage('history')
-      const analysis = await getPlayerAnalysis(profile.id, PLAYER_PROGRESS_HISTORY_LIMIT, (event) => {
-        if (requestId !== playerRequestRef.current) return
-        setPlayerAnalysis((current) => {
-          if (!current || current.playerId !== profile.id) return current
-          return {
-            ...current,
-            events: [...current.events, event].sort((first, second) => (
-              new Date(second.startDate).getTime() - new Date(first.startDate).getTime()
-            )),
-          }
-        })
-      })
+      const [tournamentResult, leagueResult] = await Promise.allSettled([
+        getPlayerAnalysis(profile.id, PLAYER_PROGRESS_HISTORY_LIMIT, (event) => {
+          if (requestId !== playerRequestRef.current) return
+          setPlayerAnalysis((current) => {
+            if (!current || current.playerId !== profile.id) return current
+            return {
+              ...current,
+              events: [...current.events, event].sort((first, second) => (
+                new Date(second.startDate).getTime() - new Date(first.startDate).getTime()
+              )),
+            }
+          })
+        }),
+        getPlayerLeagueAnalysis(profile.id, 10, (season) => {
+          if (requestId !== playerRequestRef.current) return
+          setPlayerLeagueAnalysis((current) => {
+            if (!current || current.playerId !== profile.id) return current
+            const seasons = [...current.seasons.filter((item) => `${item.id}-${item.teamId}` !== `${season.id}-${season.teamId}`), season]
+              .sort((first, second) => new Date(second.startDate).getTime() - new Date(first.startDate).getTime())
+            return { ...current, seasons }
+          })
+        }),
+      ])
       if (requestId !== playerRequestRef.current) return
-      setPlayerAnalysis({ ...analysis, playerName: profile.name })
+      if (tournamentResult.status === 'fulfilled') {
+        setPlayerAnalysis({ ...tournamentResult.value, playerName: profile.name })
+      } else {
+        setPlayerError(tournamentResult.reason instanceof Error ? tournamentResult.reason.message : 'Tournament history could not be loaded.')
+      }
+      if (leagueResult.status === 'fulfilled') {
+        setPlayerLeagueAnalysis({ ...leagueResult.value, playerName: profile.name })
+      } else {
+        setPlayerLeagueError('Lunar League history could not be loaded.')
+      }
     } catch (caught) {
       if (requestId !== playerRequestRef.current) return
       setPlayerError(caught instanceof Error ? caught.message : 'The player could not be loaded.')
     } finally {
       if (requestId === playerRequestRef.current) {
+        setIsLoadingLeague(false)
         setIsAnalyzingPlayer(false)
         setPlayerLoadingStage(null)
       }
@@ -1321,7 +1565,10 @@ function App() {
     setError(null)
     setPlayerProfile(null)
     setPlayerAnalysis(null)
+    setPlayerLeagueAnalysis(null)
+    setIsLoadingLeague(false)
     setPlayerError(null)
+    setPlayerLeagueError(null)
     setIsAnalyzingPlayer(false)
     setPlayerLoadingStage(null)
     setShowPlayerSearch(false)
@@ -1347,6 +1594,7 @@ function App() {
     setShowTournamentSearch(false)
     setError(null)
     setPlayerError(null)
+    setPlayerLeagueError(null)
     setShareCopied(false)
     updateSharedLocation({
       mode: nextMode,
@@ -1778,10 +2026,12 @@ function App() {
           <PlayerProgressWorkspace
             profile={playerProfile}
             analysis={playerAnalysis}
+            leagueAnalysis={playerLeagueAnalysis}
+            leagueError={playerLeagueError}
+            isLoadingLeague={isLoadingLeague}
             error={playerError}
             isLoading={isAnalyzingPlayer}
             loadingStage={playerLoadingStage}
-            historyLimit={PLAYER_PROGRESS_HISTORY_LIMIT}
             onCopyShareLink={() => void copyShareLink()}
             shareCopied={shareCopied}
             canShare={Boolean(playerProfile && playerReference.trim())}

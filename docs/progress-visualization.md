@@ -44,6 +44,16 @@ The current view uses a single-player timeline scatter plot with optional connec
 
 This is better described as a timeline with evidence points than as a continuous performance curve. A rolling median or trend line can be considered later, but should not be the default because the sample is sparse and the classes are not equivalent.
 
+## Lunar League progress view
+
+The player view now includes a separate Lunar League section instead of mixing league standings into the tournament placement percentage chart. League division is categorical: the vertical scale runs from Elitedivision through Serie 5, with higher divisions higher on the chart. Each season is drawn as a horizontal band from its start to end date, and a dashed step connector shows the change between seasons. The marker label shows team standing, such as `1st / 7`.
+
+The chart is paired with season evidence cards. Each card keeps the full division name, region and A/B pool suffix, team link, team standing, team fixture record, selected-player doubles record and match points. Fixture details stay exploratory behind a disclosure control, where individual partners, opponents, scores and outcomes are available.
+
+This separation keeps two different kinds of evidence honest: tournament charts answer “how did the player finish relative to that field?”, while the league chart answers “which division did the player compete in, and how did their team and individual record look that season?”.
+
+The API client discovers both kinds of history through one shared participated-events request, then uses direct player-to-team league lookups and bounded concurrent fixture enrichment. Transient throttling and network failures are retried with backoff, while partial season cards can render as they arrive.
+
 ## Open design decisions before implementation
 
 - Whether the first release should accept a profile URL, a Rankedin `R...` ID, or both.
