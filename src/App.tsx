@@ -1016,7 +1016,6 @@ function LeagueProgressSection({ seasons, isLoading, error }: LeagueProgressSect
         <div>
           <div className="section-kicker">LUNAR LEAGUE PROGRESS</div>
           <h2>Follow the division path.</h2>
-          <p>Each division is a band, with fixture checkpoints placed inside it according to the team’s table position.</p>
         </div>
         <span className="progress-card-direction">higher is stronger</span>
       </div>
