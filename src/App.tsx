@@ -48,6 +48,7 @@ const DEFAULT_TOURNAMENT_URL =
   'https://www.rankedin.com/en/tournament/70385/meny-x-wepadel-open/players'
 const DEFAULT_PLAYER_REFERENCE =
   'https://www.rankedin.com/en/player/R000229993/rasmus-kock-thygesen/info'
+const PLAYER_PROGRESS_HISTORY_LIMIT = 25
 
 type WorkspaceMode = 'tournament' | 'player'
 
@@ -192,14 +193,17 @@ function compactClassName(className: string | null) {
     .replace(/\s*-\s*maks.*$/i, '')
     .replace(/\s+/g, ' ')
     .trim()
-  const dpfMatch = cleanedName.match(/\bDPF\s*(\d+)\b/i)
+  const dpfMatch = className.match(/\bDPF\s*(\d+)\b/i)
   if (!dpfMatch) return cleanedName
 
+  const hasMix = /\bmix\b/i.test(className)
+  const hasWomen = /\b(?:kvinder?|damer?|women?|female)\b/i.test(className)
+  const hasMen = /\b(?:herrer?|men|male)\b/i.test(className)
   let gender: 'Mix' | 'Kvinder' | 'Herrer' | null = null
-  if (/\bmix\b/i.test(cleanedName)) gender = 'Mix'
-  if (!gender && /kvinder|kvinde|dame|women|woman/i.test(cleanedName)) gender = 'Kvinder'
-  if (!gender && /herrer|herre|men|male/i.test(cleanedName)) gender = 'Herrer'
-  if (!gender) return `DPF${dpfMatch[1]}`
+  if (hasMix) gender = 'Mix'
+  if (!gender && hasWomen) gender = 'Kvinder'
+  if (!gender && hasMen) gender = 'Herrer'
+  if (!gender) return `DPF${dpfMatch[1]} (gender not listed)`
   if (gender === 'Mix') return `DPF${dpfMatch[1]} Mix`
   return `DPF${dpfMatch[1]} ${gender}`
 }
@@ -621,9 +625,10 @@ type PlayerProgressWorkspaceProps = {
   error: string | null
   isLoading: boolean
   loadingStage: 'profile' | 'history' | null
+  historyLimit: number
 }
 
-function PlayerProgressWorkspace({ profile, analysis, error, isLoading, loadingStage }: PlayerProgressWorkspaceProps) {
+function PlayerProgressWorkspace({ profile, analysis, error, isLoading, loadingStage, historyLimit }: PlayerProgressWorkspaceProps) {
   const series = useMemo(() => progressSeries(analysis?.events ?? []), [analysis])
   const points = useMemo(() => series.flatMap((item) => item.points), [series])
   const latestPoint = [...points].sort((first, second) => (
@@ -662,7 +667,7 @@ function PlayerProgressWorkspace({ profile, analysis, error, isLoading, loadingS
       {isLoading && analysis && (
         <div className="progress-loading-strip" aria-live="polite">
           <LoaderCircle className="spin" size={15} />
-          <span>{loadingStage === 'history' ? `Reading history · ${analysis.events.length} of the latest events found so far` : 'Resolving public profile'}</span>
+          <span>{loadingStage === 'history' ? `Reading history · ${analysis.events.length} of the latest ${historyLimit} events found so far` : 'Resolving public profile'}</span>
         </div>
       )}
 
@@ -863,7 +868,7 @@ function App() {
       setPlayerProfile(profile)
       setPlayerAnalysis({ playerId: profile.id, playerName: profile.name, events: [] })
       setPlayerLoadingStage('history')
-      const analysis = await getPlayerAnalysis(profile.id, preferences.historyLimit, (event) => {
+      const analysis = await getPlayerAnalysis(profile.id, PLAYER_PROGRESS_HISTORY_LIMIT, (event) => {
         if (requestId !== playerRequestRef.current) return
         setPlayerAnalysis((current) => {
           if (!current || current.playerId !== profile.id) return current
@@ -1073,7 +1078,7 @@ function App() {
               </select>
             </label>
             <label className="preference-row">
-              <span>History depth</span>
+              <span>Pair history depth</span>
               <select
                 value={preferences.historyLimit}
                 onChange={(event) => setPreferences((current) => ({ ...current, historyLimit: Number(event.target.value) as Preferences['historyLimit'] }))}
@@ -1101,7 +1106,7 @@ function App() {
                 onChange={(event) => setPreferences((current) => ({ ...current, showContext: event.target.checked }))}
               />
             </label>
-            <p className="popover-note">Tournament and pair choices are never stored.</p>
+            <p className="popover-note">Tournament and pair choices are never stored. Player Progress reads up to 25 finished events for a more useful timeline.</p>
           </div>
         )}
       </header>
@@ -1399,6 +1404,7 @@ function App() {
             error={playerError}
             isLoading={isAnalyzingPlayer}
             loadingStage={playerLoadingStage}
+            historyLimit={PLAYER_PROGRESS_HISTORY_LIMIT}
           />
         )}
       </main>
