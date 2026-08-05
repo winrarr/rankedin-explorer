@@ -218,14 +218,43 @@ type RawMatchesResponse = {
 }
 
 const responseCache = new Map<string, Promise<unknown>>()
+const requestQueue: Array<() => void> = []
+const MAX_ACTIVE_REQUESTS = 12
+let activeRequestCount = 0
+
+function drainRequestQueue() {
+  while (activeRequestCount < MAX_ACTIVE_REQUESTS && requestQueue.length) {
+    const nextRequest = requestQueue.shift()
+    if (!nextRequest) return
+    activeRequestCount += 1
+    nextRequest()
+  }
+}
+
+function enqueueRequest<T>(task: () => Promise<T>) {
+  return new Promise<T>((resolve, reject) => {
+    requestQueue.push(async () => {
+      try {
+        resolve(await task())
+      } catch (error) {
+        reject(error)
+      } finally {
+        activeRequestCount -= 1
+        drainRequestQueue()
+      }
+    })
+    drainRequestQueue()
+  })
+}
 
 async function request<T>(path: string): Promise<T> {
   const cached = responseCache.get(path)
   if (cached) return cached as Promise<T>
 
-  const pending = fetch(`${API_BASE}${path}`, {
-    signal: AbortSignal.timeout(12000),
-  }).then(async (response) => {
+  const pending = enqueueRequest(async () => {
+    const response = await fetch(`${API_BASE}${path}`, {
+      signal: AbortSignal.timeout(12000),
+    })
     if (!response.ok) {
       throw new Error(`Rankedin returned ${response.status} for ${path}`)
     }
@@ -252,7 +281,7 @@ function query(params: Record<string, string | number | boolean | undefined>) {
   return `?${search.toString()}`
 }
 
-export async function mapWithConcurrency<T, R>(
+async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,
   mapper: (item: T) => Promise<R>,

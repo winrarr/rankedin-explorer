@@ -28,7 +28,6 @@ import {
   getPlayerAnalysis,
   getPlayerProfile,
   getTournamentSnapshot,
-  mapWithConcurrency,
   type MatchRecord,
   type PairRecord,
   type PlayerAnalysis,
@@ -944,8 +943,8 @@ function App() {
     setFieldPlacementSummaries({})
     setFieldPlacementsLoaded(false)
 
-    const results = await mapWithConcurrency(players, 2, async (player) => {
-      try {
+    const results = await Promise.allSettled(
+      players.map(async (player) => {
         const analysis = await getPlayerAnalysis(player.id, 5, (event) => {
           if (requestId !== fieldPlacementRequestRef.current) return
           setFieldPlacementSummaries((current) => {
@@ -969,18 +968,18 @@ function App() {
             [player.id]: { ...analysis, playerName: player.name },
           }))
         }
-        return { player, analysis, failed: false }
-      } catch {
-        if (requestId === fieldPlacementRequestRef.current) {
-          setFieldPlacementSummaries((current) => ({ ...current, [player.id]: null }))
-        }
-        return { player, analysis: null, failed: true }
-      }
-    })
+        return { player, analysis }
+      }),
+    )
     let failedCount = 0
 
-    results.forEach(({ failed }) => {
-      if (failed) failedCount += 1
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') return
+      const player = players[index]
+      if (requestId === fieldPlacementRequestRef.current) {
+        setFieldPlacementSummaries((current) => ({ ...current, [player.id]: null }))
+      }
+      failedCount += 1
     })
 
     if (requestId !== fieldPlacementRequestRef.current) return
