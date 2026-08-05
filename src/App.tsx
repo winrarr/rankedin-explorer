@@ -20,7 +20,6 @@ import {
   Settings2,
   Sparkles,
   Trophy,
-  UserRound,
   Users,
   X,
 } from 'lucide-react'
@@ -109,6 +108,11 @@ function updateSharedLocation({ mode, tournament, classId, player }: {
 function isDirectTournamentReference(value: string) {
   const trimmed = value.trim()
   return /^\d{3,}$/.test(trimmed) || /\/tournament\/\d+/i.test(trimmed)
+}
+
+function isDirectPlayerReference(value: string) {
+  const trimmed = value.trim()
+  return /^R\d+$/i.test(trimmed) || /\/player\/R\d+/i.test(trimmed)
 }
 
 const demoParticipants: PairRecord[] = [
@@ -860,7 +864,6 @@ function App() {
   const [isLoadingFieldPlacements, setIsLoadingFieldPlacements] = useState(false)
   const [fieldPlacementError, setFieldPlacementError] = useState<string | null>(null)
   const [showPlayerSearch, setShowPlayerSearch] = useState(false)
-  const [playerSearchTerm, setPlayerSearchTerm] = useState('')
   const [playerSearchResults, setPlayerSearchResults] = useState<PlayerSearchResult[]>([])
   const [isSearchingPlayers, setIsSearchingPlayers] = useState(false)
   const [playerSearchError, setPlayerSearchError] = useState<string | null>(null)
@@ -874,8 +877,8 @@ function App() {
   const playerSearchRequestRef = useRef(0)
   const tournamentSearchRequestRef = useRef(0)
   const lastAnalyzedTournamentReferenceRef = useRef('')
-  const playerSearchRef = useRef<HTMLDivElement>(null)
-  const tournamentSearchRef = useRef<HTMLDivElement>(null)
+  const lastAnalyzedPlayerReferenceRef = useRef('')
+  const searchAnchorRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [showPreferences, setShowPreferences] = useState(false)
 
@@ -896,8 +899,10 @@ function App() {
   useEffect(() => {
     function closeSearchMenus(event: PointerEvent) {
       if (!(event.target instanceof Node)) return
-      if (!playerSearchRef.current?.contains(event.target)) setShowPlayerSearch(false)
-      if (!tournamentSearchRef.current?.contains(event.target)) setShowTournamentSearch(false)
+      if (!searchAnchorRef.current?.contains(event.target)) {
+        setShowPlayerSearch(false)
+        setShowTournamentSearch(false)
+      }
     }
 
     document.addEventListener('pointerdown', closeSearchMenus)
@@ -905,14 +910,14 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const normalizedTerm = playerSearchTerm.trim()
+    const normalizedTerm = playerReference.trim()
     const requestId = playerSearchRequestRef.current + 1
     playerSearchRequestRef.current = requestId
     setPlayerSearchResults([])
     setPlayerSearchError(null)
     setIsSearchingPlayers(false)
 
-    if (activeMode !== 'player' || !showPlayerSearch || normalizedTerm.length < 2) return
+    if (activeMode !== 'player' || !showPlayerSearch || isDirectPlayerReference(normalizedTerm) || normalizedTerm.length < 2) return
 
     const timeout = window.setTimeout(() => {
       setIsSearchingPlayers(true)
@@ -931,7 +936,7 @@ function App() {
     }, 280)
 
     return () => window.clearTimeout(timeout)
-  }, [activeMode, playerSearchTerm, showPlayerSearch])
+  }, [activeMode, playerReference, showPlayerSearch])
 
   useEffect(() => {
     const normalizedTerm = tournamentUrl.trim()
@@ -961,6 +966,22 @@ function App() {
 
     return () => window.clearTimeout(timeout)
   }, [activeMode, tournamentUrl])
+
+  useEffect(() => {
+    const normalizedReference = playerReference.trim()
+    if (activeMode !== 'player' || !isDirectPlayerReference(normalizedReference)) {
+      lastAnalyzedPlayerReferenceRef.current = ''
+      return
+    }
+    if (normalizedReference === lastAnalyzedPlayerReferenceRef.current) return
+
+    const timeout = window.setTimeout(() => {
+      if (normalizedReference === lastAnalyzedPlayerReferenceRef.current) return
+      void analyzePlayer(normalizedReference)
+    }, 550)
+
+    return () => window.clearTimeout(timeout)
+  }, [activeMode, playerReference])
 
   useEffect(() => {
     const normalizedReference = tournamentUrl.trim()
@@ -1041,11 +1062,13 @@ function App() {
     const normalizedReference = reference.trim()
     if (!normalizedReference) return
 
+    lastAnalyzedPlayerReferenceRef.current = normalizedReference
     const requestId = playerRequestRef.current + 1
     playerRequestRef.current = requestId
     setIsAnalyzingPlayer(true)
     setPlayerLoadingStage('profile')
     setPlayerError(null)
+    setShowPlayerSearch(false)
     setShareCopied(false)
     setPlayerProfile(null)
     setPlayerAnalysis(null)
@@ -1085,10 +1108,10 @@ function App() {
   }
 
   function selectPlayerSearchResult(player: PlayerSearchResult) {
-    setPlayerSearchTerm('')
     setPlayerSearchResults([])
     setPlayerSearchError(null)
     setShowPlayerSearch(false)
+    setPlayerReference(player.rankedInId)
     void analyzePlayer(player.rankedInId)
   }
 
@@ -1252,7 +1275,6 @@ function App() {
     setPlayerLoadingStage(null)
     setShowPlayerSearch(false)
     setShowTournamentSearch(false)
-    setPlayerSearchTerm('')
     setPlayerSearchResults([])
     setPlayerSearchError(null)
     setShareCopied(false)
@@ -1399,12 +1421,12 @@ function App() {
 
             <div className="input-card">
               <label htmlFor={activeMode === 'tournament' ? 'tournament-url' : 'player-reference'}>
-                {activeMode === 'tournament' ? 'Start with a public tournament' : 'Start with a public Rankedin profile'}
+                {activeMode === 'tournament' ? 'Start with a public tournament' : 'Find a public Rankedin player'}
               </label>
-              <div className="reference-search-anchor" ref={tournamentSearchRef}>
+              <div className="reference-search-anchor" ref={searchAnchorRef}>
                 <div className="url-input-row">
                   <div className="url-input-wrap">
-                    {activeMode === 'tournament' ? <GitBranch size={17} /> : <UserRound size={17} />}
+                    {activeMode === 'tournament' ? <GitBranch size={17} /> : <Search size={17} />}
                     <input
                       id={activeMode === 'tournament' ? 'tournament-url' : 'player-reference'}
                       value={activeMode === 'tournament' ? tournamentUrl : playerReference}
@@ -1414,19 +1436,23 @@ function App() {
                           setShowTournamentSearch(true)
                         } else {
                           setPlayerReference(event.target.value)
+                          setShowPlayerSearch(true)
                         }
                       }}
                       onFocus={() => {
                         if (activeMode === 'tournament' && !isDirectTournamentReference(tournamentUrl)) setShowTournamentSearch(true)
+                        if (activeMode === 'player') setShowPlayerSearch(true)
                       }}
                       onKeyDown={(event) => {
-                        if (event.key === 'Enter') void (activeMode === 'tournament' ? analyzeTournament() : analyzePlayer())
+                        if (event.key === 'Enter' && (activeMode === 'tournament' || isDirectPlayerReference(playerReference))) {
+                          void (activeMode === 'tournament' ? analyzeTournament() : analyzePlayer())
+                        }
                       }}
-                      placeholder={activeMode === 'tournament' ? 'Search tournament name, URL or ID' : 'Paste a Rankedin profile URL or R-number'}
+                      placeholder={activeMode === 'tournament' ? 'Search tournament name, URL or ID' : 'Search player name, profile URL or R-number'}
                     />
                     {(activeMode === 'tournament' ? tournamentUrl : playerReference) && <button className="clear-input" type="button" aria-label={`Clear ${activeMode} reference`} onClick={clearReference}><X size={14} /></button>}
                   </div>
-                  <button className="primary-button" type="button" onClick={() => void (activeMode === 'tournament' ? analyzeTournament() : analyzePlayer())} disabled={activeMode === 'tournament' ? isAnalyzing || !tournamentUrl.trim() : isAnalyzingPlayer || !playerReference.trim()}>
+                  <button className="primary-button" type="button" onClick={() => void (activeMode === 'tournament' ? analyzeTournament() : analyzePlayer())} disabled={activeMode === 'tournament' ? isAnalyzing || !tournamentUrl.trim() : isAnalyzingPlayer || !isDirectPlayerReference(playerReference)}>
                     {(activeMode === 'tournament' ? isAnalyzing : isAnalyzingPlayer) ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}
                     {(activeMode === 'tournament' ? isAnalyzing : isAnalyzingPlayer) ? 'Reading…' : activeMode === 'tournament' ? 'Analyze field' : 'Read progress'}
                   </button>
@@ -1448,44 +1474,25 @@ function App() {
                     )}
                   </div>
                 )}
-              </div>
-              {activeMode === 'player' && (
-                <div className="player-search" ref={playerSearchRef}>
-                  <div className="player-search-row">
-                    <div className="url-input-wrap">
-                      <Search size={16} />
-                      <input
-                        value={playerSearchTerm}
-                        onChange={(event) => {
-                          setPlayerSearchTerm(event.target.value)
-                          setShowPlayerSearch(true)
-                        }}
-                        onFocus={() => setShowPlayerSearch(true)}
-                        placeholder="Search Rankedin players by name"
-                        aria-label="Search Rankedin players by name"
-                      />
-                    </div>
+                {activeMode === 'player' && showPlayerSearch && !isDirectPlayerReference(playerReference) && (
+                  <div className="player-search-panel">
+                    {isSearchingPlayers && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching public Rankedin profiles…</p>}
+                    {playerSearchError && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {playerSearchError}</p>}
+                    {!isSearchingPlayers && !playerSearchError && playerReference.trim().length >= 2 && !isDirectPlayerReference(playerReference) && !playerSearchResults.length && <p className="player-search-status">No public players matched that name.</p>}
+                    {!!playerSearchResults.length && (
+                      <div className="player-search-results" role="listbox" aria-label="Player search results">
+                        {playerSearchResults.map((player) => (
+                          <button className="player-search-result" type="button" role="option" key={player.rankedInId} onClick={() => selectPlayerSearchResult(player)}>
+                            <span className="player-search-result-name">{player.name}</span>
+                            <span className="player-search-result-id">{player.rankedInId}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {showPlayerSearch && (
-                    <div className="player-search-panel">
-                      {isSearchingPlayers && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching public Rankedin profiles…</p>}
-                      {playerSearchError && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {playerSearchError}</p>}
-                      {!isSearchingPlayers && !playerSearchError && playerSearchTerm.trim().length >= 2 && !playerSearchResults.length && <p className="player-search-status">No public players matched that name.</p>}
-                      {!!playerSearchResults.length && (
-                        <div className="player-search-results" role="listbox" aria-label="Player search results">
-                          {playerSearchResults.map((player) => (
-                            <button className="player-search-result" type="button" role="option" key={player.rankedInId} onClick={() => selectPlayerSearchResult(player)}>
-                              <span className="player-search-result-name">{player.name}</span>
-                              <span className="player-search-result-id">{player.rankedInId}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-              <p className="input-hint"><Info size={14} /> No login. No database. {activeMode === 'tournament' ? 'Paste a public tournament URL or ID to begin.' : 'Only finished public tournament results are charted.'}</p>
+                )}
+              </div>
+              <p className="input-hint"><Info size={14} /> No login. No database. {activeMode === 'tournament' ? 'Paste a public tournament URL or ID to begin.' : 'Type a name or paste a public profile URL/R-number.'}</p>
             </div>
             {(activeMode === 'tournament' ? error : playerError) && <div className="error-banner" role="alert"><CircleHelp size={16} /> {activeMode === 'tournament' ? error : playerError}</div>}
           </div>
