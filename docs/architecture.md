@@ -40,7 +40,7 @@ src/lib/rankedin.ts  ── normalized domain types ──>  React view state
 3. Load one bounded participated-event window and split it into finished tournament events and finished Lunar League seasons.
 4. Analyze tournament placements and league seasons in parallel. For tournaments, locate the player's result by numeric participant ID across event classes.
 5. For Lunar League, resolve the player's team directly, then load pool standing, team fixtures and individual doubles in parallel within the shared request queue.
-6. For the combined league chart, load the pool fixture list, the league ordering rules and one aggregate standing response per completed fixture. Reconstruct the selected team's rank after each of its own fixtures using all pool fixtures completed by that point, while keeping fixture result, score and opponent on the checkpoint. Derive the visible division and time windows from the player's seasons and checkpoint dates.
+6. For the combined league chart, load the pool fixture list, the league ordering rules and one aggregate standing response per completed fixture. Reconstruct the selected team's rank after each of its own fixtures using all pool fixtures completed by that point, while keeping fixture result, score and opponent on the checkpoint. Show only divisions the player has entered, and compress gaps between chronological season slots while preserving fixture order within each slot.
 7. Normalize organizer-entered tournament class labels for chart series while retaining raw labels in the result table; keep league division names categorical and preserve region/pool suffixes as metadata.
 8. Derive tournament placement percentage from standing and field size, using the midpoint for ranged standings.
 
