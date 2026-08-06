@@ -1048,16 +1048,6 @@ function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueErro
 
       {error && <div className="error-banner" role="alert"><CircleHelp size={16} /> {error}</div>}
 
-      {isLoading && !analysis && (
-        <section className="progress-empty-card">
-          <div className="trace-empty-icon"><LoaderCircle className="spin" size={21} /></div>
-          <h3>{loadingStage === 'profile' ? 'Finding the public profile' : 'Reading finished player history'}</h3>
-          <p>{loadingStage === 'profile'
-            ? 'The profile is being resolved before its tournament history is checked.'
-            : 'Rankedin is checking tournament placements and Lunar League seasons in parallel.'}</p>
-        </section>
-      )}
-
       {isLoading && analysis && (
         <div className="progress-loading-strip" aria-live="polite">
           <LoaderCircle className="spin" size={15} />
@@ -1849,6 +1839,17 @@ function App() {
                 )}
               </div>
               <p className="input-hint"><Info size={14} /> No login. No database. {activeMode === 'tournament' ? 'Paste a public tournament URL or ID to begin.' : 'Type a name or paste a public profile URL/R-number.'}</p>
+              {((activeMode === 'tournament' && isAnalyzing) || (activeMode === 'player' && isAnalyzingPlayer && !playerProfile)) && (
+                <div className="lookup-loading-state" role="status" aria-live="polite">
+                  <LoaderCircle className="spin" size={16} />
+                  <div className="lookup-loading-copy">
+                    <strong>{activeMode === 'tournament' ? 'Loading tournament field' : 'Finding public profile'}</strong>
+                    <span>{activeMode === 'tournament'
+                      ? 'Finding event details and reading its class roster. This can take a moment.'
+                      : 'Resolving the profile before reading tournament and Lunar League history.'}</span>
+                  </div>
+                </div>
+              )}
             </div>
             {(activeMode === 'tournament' ? error : playerError) && <div className="error-banner" role="alert"><CircleHelp size={16} /> {activeMode === 'tournament' ? error : playerError}</div>}
           </div>
@@ -1904,7 +1905,7 @@ function App() {
                 <p>{snapshot.selectedClass.name.includes('(') ? snapshot.selectedClass.name.match(/\(([^)]+)\)/)?.[1] : 'Selected class'} <span className="muted-divider">/</span> {snapshot.participants.length} pairs visible</p>
               </div>
               <div className="field-card-tools">
-                <div className="placement-load-status" aria-live="polite">
+                <div className={`placement-load-status ${isLoadingFieldPlacements ? 'is-loading' : ''}`} aria-live="polite">
                   {isLoadingFieldPlacements ? <LoaderCircle className="spin" size={14} /> : <History size={14} />}
                   {isLoadingFieldPlacements
                     ? `Reading latest 5 · ${Object.keys(fieldPlacementSummaries).length}/${snapshot.participants.length * 2} players…`
