@@ -1030,21 +1030,21 @@ function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueErro
 
   return (
     <>
-      <section className="workspace-heading">
-        <div>
-          <div className="eyebrow">PLAYER PROGRESS <span className="live-dot" /> {profile ? 'LIVE DATA' : 'READY'}</div>
-          <h2>{profile?.name ?? 'Look up your progress'}</h2>
-          <p>{profile ? `${profile.homeClubName ?? 'Home club unavailable'} / ${profile.countryCode?.toUpperCase() ?? 'Country unavailable'} / ${points.length || 'No'} comparable results` : 'Use a public Rankedin profile to see placement over time.'}</p>
-        </div>
-        {profile && (
+      {profile && (
+        <section className="workspace-heading">
+          <div>
+            <div className="eyebrow">PLAYER PROGRESS <span className="live-dot" /> LIVE DATA</div>
+            <h2>{profile.name}</h2>
+            <p>{`${profile.homeClubName ?? 'Home club unavailable'} / ${profile.countryCode?.toUpperCase() ?? 'Country unavailable'} / ${points.length || 'No'} comparable results`}</p>
+          </div>
           <div className="workspace-actions">
             <button className="text-button share-button" type="button" onClick={onCopyShareLink} disabled={!canShare}>
               {shareCopied ? <Check size={15} /> : <Copy size={15} />} {shareCopied ? 'Link copied' : 'Copy share link'}
             </button>
             <a className="outline-button" href={`https://www.rankedin.com${profile.url}`} target="_blank" rel="noreferrer">Open profile <ArrowUpRight size={15} /></a>
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
       {error && <div className="error-banner" role="alert"><CircleHelp size={16} /> {error}</div>}
 
