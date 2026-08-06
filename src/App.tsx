@@ -1926,17 +1926,6 @@ function App() {
             {(activeMode === 'tournament' ? error : playerError) && <div className="error-banner" role="alert"><CircleHelp size={16} /> {activeMode === 'tournament' ? error : playerError}</div>}
           </div>
 
-          <aside className="signal-card">
-            <div className="signal-topline"><span>HOW TO READ THIS</span></div>
-            <div className="signal-icon"><Gauge size={21} /></div>
-            <h2>Three questions beat one win rate.</h2>
-            <p>Use the field level, the finish and the match context together to understand what a Rankedin result really says.</p>
-            <div className="signal-list">
-              <div><span className="signal-dot signal-dot-sage" /><span>Where did they play?</span><strong>level</strong></div>
-              <div><span className="signal-dot signal-dot-blue" /><span>How did they finish?</span><strong>placement</strong></div>
-              <div><span className="signal-dot signal-dot-coral" /><span>Who did they face?</span><strong>matches</strong></div>
-            </div>
-          </aside>
         </section>
 
         {activeMode === 'tournament' ? (
