@@ -15,7 +15,6 @@ import {
   Info,
   LoaderCircle,
   LineChart,
-  RefreshCw,
   Search,
   Settings2,
   Sparkles,
@@ -117,70 +116,6 @@ function isDirectTournamentReference(value: string) {
 function isDirectPlayerReference(value: string) {
   const trimmed = value.trim()
   return /^R\d+$/i.test(trimmed) || /\/player\/R\d+/i.test(trimmed)
-}
-
-const demoParticipants: PairRecord[] = [
-  {
-    id: '159208-195758-0',
-    first: {
-      id: 488083,
-      rankedInId: 'R000159208',
-      name: 'Runa H. Kortsen',
-      url: '/en/player/R000159208/runa-h-kortsen',
-      rating: 13.93,
-    },
-    second: {
-      id: 839604,
-      rankedInId: 'R000195758',
-      name: 'Kim Juul Kortsen',
-      url: '/en/player/R000195758/kim-juul-kortsen',
-      rating: 13.93,
-    },
-    ranking: null,
-  },
-  {
-    id: '202568-349673-1',
-    first: {
-      id: 922073,
-      rankedInId: 'R000202568',
-      name: 'Jens Christian Holme Demant',
-      url: '/en/player/R000202568/jens-christian-holme-demant',
-      rating: 12.88,
-    },
-    second: {
-      id: 2991674,
-      rankedInId: 'R000349673',
-      name: 'Eva Holme Demant',
-      url: '/en/player/R000349673/eva-holme-demant',
-      rating: 12.88,
-    },
-    ranking: null,
-  },
-]
-
-const demoSnapshot: TournamentSnapshot = {
-  tournamentId: 70385,
-  name: 'Meny x WePadel Open',
-  location: 'Harlev J',
-  country: 'Denmark',
-  sport: 'Padel',
-  startDate: '2026-09-05T08:00:00',
-  endDate: '2026-09-05T22:00:00',
-  state: 1,
-  isPremium: true,
-  classes: [
-    { id: 166328, name: 'Herre DPF25 (Først til mølle)', participantsType: 4 },
-    { id: 166329, name: 'Dame DPF35 (Først til mølle)', participantsType: 4 },
-    { id: 166331, name: 'Mix DPF25 (Først til mølle)', participantsType: 4 },
-    { id: 166332, name: 'Herre DPF35 (Først til mølle)', participantsType: 4 },
-  ],
-  selectedClass: {
-    id: 166331,
-    name: 'Mix DPF25 (Først til mølle)',
-    participantsType: 4,
-  },
-  participants: demoParticipants,
-  source: 'preview',
 }
 
 function formatDate(value: string) {
@@ -1130,15 +1065,6 @@ function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueErro
         </div>
       )}
 
-      {!isLoading && !analysis && !error && (
-        <section className="progress-empty-card">
-          <div className="trace-empty-icon"><LineChart size={21} /></div>
-          <h3>Your placement story starts here.</h3>
-          <p>Paste a public Rankedin profile above to compare your finishes across levels and classes.</p>
-          <div className="trace-rule"><span /><span /><span /></div>
-        </section>
-      )}
-
       {analysis && (
         <>
           <section className="metric-grid progress-metric-grid" aria-label="Player progress summary">
@@ -1248,7 +1174,7 @@ function App() {
   const [playerLoadingStage, setPlayerLoadingStage] = useState<'profile' | 'history' | null>(null)
   const [playerError, setPlayerError] = useState<string | null>(null)
   const [playerLeagueError, setPlayerLeagueError] = useState<string | null>(null)
-  const [snapshot, setSnapshot] = useState<TournamentSnapshot>(demoSnapshot)
+  const [snapshot, setSnapshot] = useState<TournamentSnapshot | null>(null)
   const [selectedPairId, setSelectedPairId] = useState<string | null>(null)
   const [pairHistory, setPairHistory] = useState<{
     first: { analysis: PlayerAnalysis | null; error: string | null }
@@ -1399,28 +1325,28 @@ function App() {
   }, [activeMode, tournamentUrl])
 
   useEffect(() => {
-    if (activeMode !== 'tournament' || snapshot.source !== 'live') return
+    if (activeMode !== 'tournament' || !snapshot) return
     void loadFieldPlacements(snapshot.participants)
-  }, [activeMode, snapshot.participants, snapshot.selectedClass.id, snapshot.source])
+  }, [activeMode, snapshot])
 
   const visibleParticipants = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
-    if (!normalizedSearch) return snapshot.participants
+    if (!normalizedSearch) return snapshot?.participants ?? []
 
-    return snapshot.participants.filter((pair) =>
+    return (snapshot?.participants ?? []).filter((pair) =>
       `${pair.first.name} ${pair.second.name}`.toLowerCase().includes(normalizedSearch),
     )
-  }, [searchTerm, snapshot.participants])
+  }, [searchTerm, snapshot])
 
-  const ratings = snapshot.participants
+  const ratings = (snapshot?.participants ?? [])
     .map(pairRating)
     .filter((rating): rating is number => rating !== null)
   const averageRating = ratings.length
     ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
     : null
   const ratingSpread = ratings.length > 1 ? Math.max(...ratings) - Math.min(...ratings) : null
-  const selectedPair = snapshot.participants.find((pair) => pair.id === selectedPairId)
-  const classTitle = snapshot.selectedClass.name.replace(/\s*\([^)]*\)/, '')
+  const selectedPair = snapshot?.participants.find((pair) => pair.id === selectedPairId)
+  const classTitle = snapshot?.selectedClass.name.replace(/\s*\([^)]*\)/, '') ?? ''
   const fieldClassSummaries = useMemo(
     () => summarizeFieldPlacements(fieldPlacementSummaries),
     [fieldPlacementSummaries],
@@ -1575,6 +1501,7 @@ function App() {
   }
 
   async function chooseClass(classId: number) {
+    if (!snapshot) return
     const nextClass = snapshot.classes.find((item) => item.id === classId)
     if (!nextClass || nextClass.id === snapshot.selectedClass.id) return
 
@@ -1584,7 +1511,7 @@ function App() {
 
     try {
       const participants = await getClassParticipants(snapshot.tournamentId, classId)
-      setSnapshot((current) => ({ ...current, selectedClass: nextClass, participants, source: 'live' }))
+      setSnapshot((current) => current ? ({ ...current, selectedClass: nextClass, participants }) : current)
       setSelectedPairId(null)
       setPairHistory(null)
       setFieldPlacementSummaries({})
@@ -1678,11 +1605,11 @@ function App() {
     setIsLoadingFieldPlacements(false)
   }
 
-  function resetToPreview() {
+  function resetToHome() {
     playerRequestRef.current += 1
     setActiveMode('tournament')
     fieldPlacementRequestRef.current += 1
-    setSnapshot(demoSnapshot)
+    setSnapshot(null)
     setTournamentUrl('')
     setPlayerReference('')
     setSelectedPairId(null)
@@ -1729,7 +1656,7 @@ function App() {
     updateSharedLocation({
       mode: nextMode,
       tournament: tournamentUrl,
-      classId: snapshot.source === 'live' ? snapshot.selectedClass.id : undefined,
+      classId: snapshot?.selectedClass.id,
       player: playerReference,
     })
   }
@@ -1737,7 +1664,7 @@ function App() {
   return (
     <div className={`app-shell ${preferences.density === 'compact' ? 'density-compact' : ''}`}>
       <header className="topbar">
-        <a className="brand" href="." aria-label="Rankedin Explorer home" onClick={(event) => { event.preventDefault(); resetToPreview() }}>
+        <a className="brand" href="." aria-label="Rankedin Explorer home" onClick={(event) => { event.preventDefault(); resetToHome() }}>
           <span className="brand-mark"><Activity size={16} strokeWidth={2.5} /></span>
           <span>rankedin <strong>explorer</strong></span>
         </a>
@@ -1929,16 +1856,16 @@ function App() {
         </section>
 
         {activeMode === 'tournament' ? (
+          snapshot ? (
           <>
             <section className="workspace-heading">
           <div>
-            <div className="eyebrow">CURRENT FIELD <span className="live-dot" /> {snapshot.source === 'live' ? 'LIVE DATA' : 'PREVIEW DATA'}</div>
+            <div className="eyebrow">CURRENT FIELD <span className="live-dot" /> LIVE DATA</div>
             <h2>{snapshot.name}</h2>
             <p>{snapshot.location}, {snapshot.country} <span className="muted-divider">/</span> {snapshot.sport} <span className="muted-divider">/</span> {formatDate(snapshot.startDate)}</p>
           </div>
           <div className="workspace-actions">
-            {snapshot.source === 'preview' && <button className="text-button" type="button" onClick={() => void analyzeTournament()}><RefreshCw size={15} /> Refresh live data</button>}
-            <button className="text-button share-button" type="button" onClick={() => void copyShareLink()} disabled={snapshot.source !== 'live' || !tournamentUrl.trim()}>
+            <button className="text-button share-button" type="button" onClick={() => void copyShareLink()} disabled={!tournamentUrl.trim()}>
               {shareCopied ? <Check size={15} /> : <Copy size={15} />} {shareCopied ? 'Link copied' : 'Copy share link'}
             </button>
             <a className="outline-button" href={`https://www.rankedin.com/en/tournament/${snapshot.tournamentId}`} target="_blank" rel="noreferrer">Open event <ArrowUpRight size={15} /></a>
@@ -2133,6 +2060,7 @@ function App() {
               <button className="privacy-link" type="button" onClick={() => setShowPreferences(true)}>Review preferences <ArrowUpRight size={14} /></button>
             </section>
           </>
+          ) : null
         ) : (
           <PlayerProgressWorkspace
             profile={playerProfile}

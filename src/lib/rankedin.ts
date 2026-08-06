@@ -57,7 +57,6 @@ export type TournamentSnapshot = {
   classes: ClassOption[]
   selectedClass: ClassOption
   participants: PairRecord[]
-  source: 'live' | 'preview'
 }
 
 export type MatchRecord = {
@@ -852,7 +851,6 @@ export async function getTournamentSnapshot(
     classes,
     selectedClass,
     participants: await getClassParticipants(tournamentId, selectedClass.id),
-    source: 'live',
   }
 }
 

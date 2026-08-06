@@ -11,7 +11,7 @@ Rankedin Explorer is a read-only React/Vite site for making public Rankedin tour
 - `docs/` — product scope, architecture, API contract notes, constraints and decisions.
 - `.github/workflows/deploy.yml` — GitHub Pages deployment.
 
-The Rankedin API is the source of truth for live data. Do not hard-code live tournament results into the application. Preview data in `App.tsx` is an intentional first-screen fallback for offline use and should remain clearly labeled as preview data.
+The Rankedin API is the source of truth for live data. Do not hard-code live tournament results into the application. New sessions should remain empty until the user provides a public tournament or player reference.
 
 ## Boundaries
 
