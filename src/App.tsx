@@ -2095,45 +2095,37 @@ function App() {
             <div className="table-footnote"><Info size={14} /> Skill is the historical value shown at tournament start, not a live rating.</div>
           </div>
 
-          <aside className="history-card">
+        </section>
+
+        {selectedPair && (
+          <section className="history-card pair-history-panel" aria-label={`Pair history for ${selectedPair.first.name} and ${selectedPair.second.name}`}>
             <div className="card-heading card-heading-small">
               <div>
                 <div className="section-kicker">PAIR HISTORY</div>
-                <h2>{selectedPair ? `${selectedPair.first.name} + ${selectedPair.second.name}` : 'Compare a pair over time'}</h2>
-                {selectedPair && <p>Placements come first. Open a tournament when you want the match-by-match context.</p>}
+                <h2>{selectedPair.first.name} + {selectedPair.second.name}</h2>
+                <p>Placements come first. Open a tournament when you want the match-by-match context.</p>
               </div>
-              {selectedPair && <button className="icon-button quiet" type="button" onClick={() => { setSelectedPairId(null); setPairHistory(null) }} aria-label="Close pair history"><X size={17} /></button>}
+              <button className="icon-button quiet" type="button" onClick={() => { setSelectedPairId(null); setPairHistory(null) }} aria-label="Close pair history"><X size={17} /></button>
             </div>
 
-            {!selectedPair && (
-              <div className="trace-empty">
-                <div className="trace-empty-icon"><History size={21} /></div>
-                <h3>See the last {preferences.historyLimit} finished events for both players.</h3>
-                <p>Choose a pair above to compare their classes, placements and field sizes. Match details stay one click away.</p>
-                <div className="trace-rule"><span /><span /><span /></div>
-              </div>
-            )}
-
-            {selectedPair && (
-              <div className="pair-history-grid">
-                <PlayerHistoryColumn
-                  player={selectedPair.first}
-                  analysis={pairHistory?.first.analysis ?? null}
-                  error={pairHistory?.first.error ?? null}
-                  isLoading={isLoadingPair}
-                  showContext={preferences.showContext}
-                />
-                <PlayerHistoryColumn
-                  player={selectedPair.second}
-                  analysis={pairHistory?.second.analysis ?? null}
-                  error={pairHistory?.second.error ?? null}
-                  isLoading={isLoadingPair}
-                  showContext={preferences.showContext}
-                />
-              </div>
-            )}
-          </aside>
-        </section>
+            <div className="pair-history-grid">
+              <PlayerHistoryColumn
+                player={selectedPair.first}
+                analysis={pairHistory?.first.analysis ?? null}
+                error={pairHistory?.first.error ?? null}
+                isLoading={isLoadingPair}
+                showContext={preferences.showContext}
+              />
+              <PlayerHistoryColumn
+                player={selectedPair.second}
+                analysis={pairHistory?.second.analysis ?? null}
+                error={pairHistory?.second.error ?? null}
+                isLoading={isLoadingPair}
+                showContext={preferences.showContext}
+              />
+            </div>
+          </section>
+        )}
 
             <section className="privacy-strip">
               <div className="privacy-icon"><Database size={17} /></div>
