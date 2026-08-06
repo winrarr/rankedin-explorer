@@ -654,6 +654,7 @@ async function findPlayerClassResult(
 
       const classOption = classes[currentIndex]
       try {
+        // Share each class payload across players while keeping this player's early-stop state local.
         const result = await request<RawResultsResponse>(
           `/tournament/GetResultsAsync${query({
             tournamentId: eventId,
@@ -661,8 +662,8 @@ async function findPlayerClassResult(
             rankingId,
             language: 'en',
           })}`,
-          controller.signal,
         )
+        if (controller.signal.aborted) return
         const playerResult = result.Data.find(
           (item) => item.Player1ParticipantId === playerId || item.Player2ParticipantId === playerId,
         )
