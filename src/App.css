@@ -124,16 +124,18 @@
 .popover-note { margin: 13px 0 0; font-size: 11px; line-height: 1.5; color: var(--muted); }
 
 main { width: min(1240px, calc(100% - 64px)); margin: 0 auto; padding-bottom: 38px; }
-.hero-grid { display: grid; grid-template-columns: minmax(0, 860px); justify-content: center; padding: 76px 0 64px; }
-.hero-copy { max-width: 860px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 980px); justify-content: center; padding: 76px 0 64px; }
+.hero-copy { max-width: 980px; text-align: center; }
 .eyebrow { color: var(--blue); display: inline-flex; align-items: center; gap: 8px; }
 .eyebrow-dot, .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--coral); display: inline-block; box-shadow: 0 0 0 4px var(--coral-soft); }
 .live-dot { width: 5px; height: 5px; margin-left: 7px; box-shadow: none; background: var(--sage); }
 h1, h2, h3, p { margin-top: 0; }
 h1 { max-width: 690px; margin: 22px 0 22px; font-family: inherit; font-size: clamp(52px, 6vw, 85px); line-height: .96; font-weight: 800; letter-spacing: -.075em; }
 h1 em { color: var(--coral); font-style: normal; }
+.hero-copy h1 { max-width: none; margin-left: auto; margin-right: auto; font-size: clamp(52px, 5.2vw, 68px); }
 .hero-lede { max-width: 570px; color: var(--muted); font-size: 16px; line-height: 1.65; }
-.input-card { position: relative; z-index: 2; max-width: 860px; margin-top: 37px; padding: 17px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 10px 30px rgba(26, 37, 43, .04); }
+.hero-lede { margin-left: auto; margin-right: auto; }
+.input-card { position: relative; z-index: 2; max-width: 860px; margin: 37px auto 0; padding: 17px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 10px 30px rgba(26, 37, 43, .04); text-align: left; }
 .input-card > label { display: block; margin: 0 0 10px 3px; font-size: 12px; font-weight: 720; }
 .url-input-row { display: flex; gap: 9px; }
 .url-input-wrap { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; padding: 0 12px; border: 1px solid var(--line); background: var(--paper); border-radius: 10px; color: var(--muted); }
@@ -203,7 +205,7 @@ h1 em { color: var(--coral); font-style: normal; }
 .league-chart-wrap { overflow: hidden; }.league-season-axis-label { fill: var(--muted); font-family: inherit; font-size: 9px; font-weight: 700; }
 
 @media (max-width: 900px) {
-  .hero-grid { grid-template-columns: 1fr; padding-top: 55px; }.metric-grid { grid-template-columns: repeat(2, 1fr); }.dashboard-grid { grid-template-columns: 1fr; }.history-card { min-height: 220px; }.pair-history-grid { grid-template-columns: 1fr; }.workspace-heading { align-items: start; flex-direction: column; gap: 17px; }.workspace-actions { width: 100%; justify-content: space-between; }
+  .hero-grid { grid-template-columns: 1fr; padding-top: 55px; }.hero-copy { text-align: left; }.metric-grid { grid-template-columns: repeat(2, 1fr); }.dashboard-grid { grid-template-columns: 1fr; }.history-card { min-height: 220px; }.pair-history-grid { grid-template-columns: 1fr; }.workspace-heading { align-items: start; flex-direction: column; gap: 17px; }.workspace-actions { width: 100%; justify-content: space-between; }
 }
 
 @media (max-width: 620px) {
