@@ -34,6 +34,8 @@ Run these from the repository root:
 
 Before handing off implementation work, run `npm run check`.
 
+Unless the user explicitly asks for local-only changes, always deploy completed implementation changes before handoff. Run `npm run check`, commit only the scoped changes, push to the configured deployment branch, and verify the GitHub Pages workflow succeeds.
+
 ## Durable project knowledge
 
 - `docs/architecture.md` — current data flow and component boundaries.

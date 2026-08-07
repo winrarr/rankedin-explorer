@@ -143,6 +143,8 @@ h1 em { color: var(--coral); font-style: normal; }
 .workspace-heading p, .card-heading p { color: var(--muted); font-size: 12px; }.muted-divider { margin: 0 8px; color: var(--line); }
 .workspace-actions { display: flex; align-items: center; gap: 18px; }.text-button { padding: 0; border: 0; color: var(--blue); background: transparent; }.text-button:hover { color: var(--ink); }
 .outline-button { padding: 9px 13px; border: 1px solid var(--line); background: var(--card); }.outline-button:hover { border-color: var(--blue); color: var(--blue); }
+.export-menu { position: relative; }.export-menu-summary { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; cursor: pointer; font-size: 10px; font-weight: 800; list-style: none; }.export-menu-summary::-webkit-details-marker { display: none; }.export-menu-panel { position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; display: grid; min-width: 180px; gap: 3px; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 9px; box-shadow: var(--shadow); }.export-menu-item { display: flex; align-items: center; gap: 7px; padding: 8px 9px; color: var(--ink); border: 0; border-radius: 6px; background: transparent; font: inherit; font-size: 10px; font-weight: 750; text-align: left; white-space: nowrap; cursor: pointer; }.export-menu-item:hover { background: var(--blue-soft); color: var(--blue); }.export-menu-item:disabled { color: var(--muted); cursor: not-allowed; opacity: .55; }
+.print-report-meta { display: none; }
 
 .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-bottom: 14px; }
 .metric-card { min-height: 118px; padding: 17px 18px; background: var(--card); border: 1px solid var(--line); border-radius: 13px; }.metric-card-dark { color: #eff4f1; background: #36545d; border-color: #36545d; }.metric-card-dark .metric-label, .metric-card-dark span { color: #b9d0d0; }
@@ -201,4 +203,64 @@ h1 em { color: var(--coral); font-style: normal; }
   .league-chart-svg { min-width: 0; }
   .league-season-grid { grid-template-columns: 1fr; margin-left: 15px; margin-right: 15px; }
   .league-chart-note, .league-loading, .league-error { margin-left: 15px; margin-right: 15px; }
+}
+
+@media print {
+  @page { size: A4; margin: 12mm; }
+  html, body { min-width: 0; color: #13232b; background: #fff; }
+  body { font-size: 10px; }
+  .topbar, .workspace-nav, .hero-grid, .footer, .privacy-strip, .workspace-actions, .pair-history-panel, .class-picker-wrap, .placement-load-note, .info-tip-message, .export-menu { display: none !important; }
+  main { width: 100%; }
+  .workspace-heading { display: block; padding: 0 0 15px; border-top: 0; }
+  .workspace-heading h2 { margin-top: 0; font-size: 25px; }
+  .workspace-heading p { font-size: 9px; }
+  .print-report-meta { display: block; margin-top: 7px; color: #66757b; font-size: 8px !important; }
+  .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-bottom: 9px; }
+  .metric-card { min-height: 82px; padding: 10px; border-color: #cfd7d5; border-radius: 7px; }
+  .metric-label { gap: 4px; font-size: 8px; }
+  .metric-card strong { margin: 8px 0 2px; font-size: 23px; }
+  .metric-card strong .loading-value { font-size: 12px; }
+  .metric-card span { font-size: 8px; }
+  .dashboard-grid { display: block; }
+  .field-card { overflow: visible; border-color: #cfd7d5; border-radius: 8px; }
+  .card-heading { padding: 13px 14px 10px; }
+  .card-heading h2 { font-size: 20px; }
+  .card-heading p { font-size: 9px; }
+  .field-card-tools { display: block; }
+  .placement-load-status { justify-content: flex-start; margin-top: 6px; color: #66757b; font-size: 8px; }
+  .field-aggregate { padding: 0 14px 11px; }
+  .field-aggregate-heading { margin-bottom: 7px; }
+  .field-aggregate-heading p { font-size: 8px; }
+  .field-aggregate-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+  .field-aggregate-other { margin-top: 9px; padding-top: 9px; }
+  .field-aggregate-other .field-aggregate-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .field-aggregate-card { padding: 7px; border-radius: 6px; }
+  .field-aggregate-card strong { font-size: 16px; }
+  .field-aggregate-card span { font-size: 7px; }
+  .league-field-summary { break-inside: avoid; }
+  .table-toolbar { padding: 8px 14px; }
+  .table-search { display: none; }
+  .table-count { margin-left: 0; font-size: 8px; }
+  .roster-table-scroll { overflow: visible; }
+  .roster-table { width: 100%; min-width: 0; table-layout: fixed; }
+  .roster-table th, .roster-table td { padding: 7px 8px; }
+  .roster-table th:nth-child(3), .roster-table td:nth-child(3), .roster-table th:nth-child(4), .roster-table td:nth-child(4), .roster-table th:nth-child(5), .roster-table td:nth-child(5) { display: table-cell; }
+  .roster-table th:first-child, .roster-table td:first-child { width: 25%; padding-left: 14px; }
+  .roster-table th:nth-child(2), .roster-table td:nth-child(2) { width: 57%; }
+  .roster-table th:nth-child(3), .roster-table td:nth-child(3) { width: 18%; }
+  .roster-table th { font-size: 7px; }
+  .pair-cell { gap: 6px; }
+  .pair-index { font-size: 8px; }
+  .pair-cell strong, .pair-cell span { font-size: 8px; }
+  .field-placement-cell { gap: 4px; }
+  .field-placement-player { grid-template-columns: 30% minmax(0, 1fr); gap: 5px; padding: 4px 5px; border-radius: 5px; }
+  .field-placement-player-name { font-size: 7px; }
+  .field-placement-tags { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; }
+  .field-placement-tag { padding: 3px 4px; font-size: 7px; }
+  .field-placement-date, .field-placement-field { font-size: 7px; }
+  .field-placement-result { font-size: 9px; }
+  .field-placement-muted { font-size: 7px; }
+  .rating-value { font-size: 13px; }
+  .rating-caption { font-size: 7px; }
+  .roster-table tbody tr { break-inside: avoid; }
 }

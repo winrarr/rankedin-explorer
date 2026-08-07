@@ -8,13 +8,17 @@ import {
   CircleHelp,
   Copy,
   Database,
+  Download,
   ExternalLink,
+  FileJson,
+  FileSpreadsheet,
   Gauge,
   GitBranch,
   History,
   Info,
   LoaderCircle,
   LineChart,
+  Printer,
   Search,
   Settings2,
   Sparkles,
@@ -74,6 +78,10 @@ import {
   placementSummaryPosition,
 } from './lib/formatters'
 import { PlayerHistoryColumn } from './components/PlayerHistoryColumn'
+import {
+  downloadTournamentCsv,
+  downloadTournamentJson,
+} from './lib/exports'
 import './App.css'
 
 const PLAYER_PROGRESS_HISTORY_LIMIT = 25
@@ -1122,6 +1130,21 @@ function App() {
     0,
   )
   const isLoadingFieldData = isLoadingFieldPlacements || isLoadingFieldLeagueDivisions
+  const canExportTournament = Boolean(snapshot && !isAnalyzing)
+
+  function tournamentExportInput() {
+    if (!snapshot) return null
+    return {
+      snapshot,
+      averageRating,
+      fieldClassSummaries,
+      fieldLeagueSummary,
+      fieldPlacementSummaries,
+      fieldLeagueDivisions,
+      fieldPlacementsLoaded,
+      fieldLeagueDivisionsLoaded,
+    }
+  }
 
   async function analyzeTournament(reference = tournamentUrl, selectedClassId?: number) {
     const normalizedReference = reference.trim()
@@ -1274,6 +1297,23 @@ function App() {
       if (activeMode === 'tournament') setError(message)
       else setPlayerError(message)
     }
+  }
+
+  function printTournamentReport() {
+    if (!canExportTournament) return
+    window.print()
+  }
+
+  function exportTournamentCsv() {
+    const input = tournamentExportInput()
+    if (!input || !canExportTournament) return
+    downloadTournamentCsv(input)
+  }
+
+  function exportTournamentJson() {
+    const input = tournamentExportInput()
+    if (!input || !canExportTournament) return
+    downloadTournamentJson(input)
   }
 
   async function chooseClass(classId: number) {
@@ -1695,11 +1735,26 @@ function App() {
             <div className="eyebrow">CURRENT FIELD <span className="live-dot" /> LIVE DATA</div>
             <h2>{snapshot.name}</h2>
             <p>{snapshot.location}, {snapshot.country} <span className="muted-divider">/</span> {snapshot.sport} <span className="muted-divider">/</span> {formatDate(snapshot.startDate)}</p>
+            <p className="print-report-meta">Tournament overview · {classTitle} · Generated {formatDate(new Date().toISOString())} · rankedin.com/en/tournament/{snapshot.tournamentId}</p>
           </div>
           <div className="workspace-actions">
             <button className="text-button share-button" type="button" onClick={() => void copyShareLink()} disabled={!tournamentUrl.trim()}>
               {shareCopied ? <Check size={15} /> : <Copy size={15} />} {shareCopied ? 'Link copied' : 'Copy share link'}
             </button>
+            <details className="export-menu">
+              <summary className="outline-button export-menu-summary"><Download size={14} /> Export overview</summary>
+              <div className="export-menu-panel" aria-label="Export tournament overview">
+                <button className="export-menu-item" type="button" onClick={printTournamentReport} disabled={!canExportTournament}>
+                  <Printer size={14} /> Print / save PDF
+                </button>
+                <button className="export-menu-item" type="button" onClick={exportTournamentCsv} disabled={!canExportTournament}>
+                  <FileSpreadsheet size={14} /> Download CSV
+                </button>
+                <button className="export-menu-item" type="button" onClick={exportTournamentJson} disabled={!canExportTournament}>
+                  <FileJson size={14} /> Download JSON
+                </button>
+              </div>
+            </details>
             <a className="outline-button" href={`https://www.rankedin.com/en/tournament/${snapshot.tournamentId}`} target="_blank" rel="noreferrer">Open event <ArrowUpRight size={15} /></a>
           </div>
         </section>

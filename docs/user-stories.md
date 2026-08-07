@@ -88,4 +88,4 @@ P15. As a player, I want class labels normalized for grouping while retaining th
 
 ## MVP selection
 
-The first release targets stories 1, 3–8, 12–24, 27, 29, 36, 43, 46, 47 and 49. The remaining stories are intentionally retained as product direction, not promises for the first release.
+The first release targets stories 1, 3–8, 12–24, 27, 29, 36, 43–47 and 49. The remaining stories are intentionally retained as product direction, not promises for the first release.
