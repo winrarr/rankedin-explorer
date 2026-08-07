@@ -20,6 +20,7 @@ src/lib/rankedin.ts  ── normalized domain types ──>  React view state
 
 - `src/lib/rankedin.ts` owns URLs, raw API payloads, API errors and normalization. It should be the only place that knows Rankedin's PascalCase response shape.
 - `src/lib/exports.ts` turns the normalized tournament view state into browser downloads. It must not fetch API data or become a second persistence layer.
+- `src/hooks/usePublicSearch.ts` owns the shared debounce, timeout, cancellation and stale-response handling for tournament and player name searches.
 - `src/lib/preferences.ts` owns the deliberately narrow local persistence policy.
 - `src/App.tsx` owns the cross-screen interaction flow and temporary request state. Focused view pieces live in `src/components/`, while pure display transformations live in `src/lib/formatters.ts` and `src/lib/fieldBreakdown.ts`.
 - `src/App.css` owns the visual system and responsive layout. Avoid one-off positional fixes; use the existing grid, flex and card primitives.

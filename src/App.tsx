@@ -78,6 +78,7 @@ import {
   placementSummaryPosition,
 } from './lib/formatters'
 import { PlayerHistoryColumn } from './components/PlayerHistoryColumn'
+import { usePublicSearch } from './hooks/usePublicSearch'
 import {
   downloadTournamentCsv,
   downloadTournamentJson,
@@ -942,24 +943,30 @@ function App() {
   const [isLoadingFieldLeagueDivisions, setIsLoadingFieldLeagueDivisions] = useState(false)
   const [fieldLeagueDivisionError, setFieldLeagueDivisionError] = useState<string | null>(null)
   const [showPlayerSearch, setShowPlayerSearch] = useState(false)
-  const [playerSearchResults, setPlayerSearchResults] = useState<PlayerSearchResult[]>([])
-  const [isSearchingPlayers, setIsSearchingPlayers] = useState(false)
-  const [playerSearchError, setPlayerSearchError] = useState<string | null>(null)
-  const [tournamentSearchResults, setTournamentSearchResults] = useState<TournamentSearchResult[]>([])
-  const [isSearchingTournaments, setIsSearchingTournaments] = useState(false)
-  const [tournamentSearchError, setTournamentSearchError] = useState<string | null>(null)
   const [showTournamentSearch, setShowTournamentSearch] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
   const fieldPlacementRequestRef = useRef(0)
   const fieldLeagueRequestRef = useRef(0)
+  const tournamentRequestRef = useRef(0)
   const playerRequestRef = useRef(0)
-  const playerSearchRequestRef = useRef(0)
-  const tournamentSearchRequestRef = useRef(0)
   const lastAnalyzedTournamentReferenceRef = useRef('')
   const lastAnalyzedPlayerReferenceRef = useRef('')
   const searchAnchorRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [showPreferences, setShowPreferences] = useState(false)
+
+  const playerSearch = usePublicSearch({
+    enabled: activeMode === 'player' && showPlayerSearch && !isDirectPlayerReference(playerReference),
+    term: playerReference,
+    label: 'Player',
+    search: searchPlayersByName,
+  })
+  const tournamentSearch = usePublicSearch({
+    enabled: activeMode === 'tournament' && showTournamentSearch && !isDirectTournamentReference(tournamentUrl),
+    term: tournamentUrl,
+    label: 'Tournament',
+    search: searchTournamentsByName,
+  })
 
   useEffect(() => {
     savePreferences(preferences)
@@ -987,100 +994,6 @@ function App() {
     document.addEventListener('click', closeSearchMenus)
     return () => document.removeEventListener('click', closeSearchMenus)
   }, [])
-
-  useEffect(() => {
-    const normalizedTerm = playerReference.trim()
-    const requestId = playerSearchRequestRef.current + 1
-    playerSearchRequestRef.current = requestId
-    setPlayerSearchResults([])
-    setPlayerSearchError(null)
-    setIsSearchingPlayers(false)
-
-    if (activeMode !== 'player' || !showPlayerSearch || isDirectPlayerReference(normalizedTerm) || normalizedTerm.length < 2) return
-
-    const controller = new AbortController()
-    let disposed = false
-    let didTimeout = false
-    let searchTimeout = 0
-    const debounceTimeout = window.setTimeout(() => {
-      setIsSearchingPlayers(true)
-      searchTimeout = window.setTimeout(() => {
-        didTimeout = true
-        controller.abort()
-      }, 8000)
-      void searchPlayersByName(normalizedTerm, 8, controller.signal)
-        .then((results) => {
-          if (disposed || requestId !== playerSearchRequestRef.current) return
-          setPlayerSearchResults(results)
-        })
-        .catch((caught) => {
-          if (disposed || requestId !== playerSearchRequestRef.current) return
-          if (caught instanceof Error && caught.name === 'AbortError') {
-            if (didTimeout) setPlayerSearchError('Player search timed out. Try again.')
-            return
-          }
-          setPlayerSearchError(caught instanceof Error ? caught.message : 'Player search could not be completed.')
-        })
-        .finally(() => {
-          window.clearTimeout(searchTimeout)
-          if (!disposed && requestId === playerSearchRequestRef.current) setIsSearchingPlayers(false)
-        })
-    }, 280)
-
-    return () => {
-      disposed = true
-      window.clearTimeout(debounceTimeout)
-      window.clearTimeout(searchTimeout)
-      controller.abort()
-    }
-  }, [activeMode, playerReference, showPlayerSearch])
-
-  useEffect(() => {
-    const normalizedTerm = tournamentUrl.trim()
-    const requestId = tournamentSearchRequestRef.current + 1
-    tournamentSearchRequestRef.current = requestId
-    setTournamentSearchResults([])
-    setTournamentSearchError(null)
-    setIsSearchingTournaments(false)
-
-    if (activeMode !== 'tournament' || isDirectTournamentReference(normalizedTerm) || normalizedTerm.length < 2) return
-
-    const controller = new AbortController()
-    let disposed = false
-    let didTimeout = false
-    let searchTimeout = 0
-    const debounceTimeout = window.setTimeout(() => {
-      setIsSearchingTournaments(true)
-      searchTimeout = window.setTimeout(() => {
-        didTimeout = true
-        controller.abort()
-      }, 8000)
-      void searchTournamentsByName(normalizedTerm, 8, controller.signal)
-        .then((results) => {
-          if (disposed || requestId !== tournamentSearchRequestRef.current) return
-          setTournamentSearchResults(results)
-        })
-        .catch((caught) => {
-          if (disposed || requestId !== tournamentSearchRequestRef.current) return
-          if (caught instanceof Error && caught.name === 'AbortError') {
-            if (didTimeout) setTournamentSearchError('Tournament search timed out. Try again.')
-            return
-          }
-          setTournamentSearchError(caught instanceof Error ? caught.message : 'Tournament search could not be completed.')
-        })
-        .finally(() => {
-          window.clearTimeout(searchTimeout)
-          if (!disposed && requestId === tournamentSearchRequestRef.current) setIsSearchingTournaments(false)
-        })
-    }, 280)
-
-    return () => {
-      disposed = true
-      window.clearTimeout(debounceTimeout)
-      window.clearTimeout(searchTimeout)
-      controller.abort()
-    }
-  }, [activeMode, tournamentUrl])
 
   useEffect(() => {
     const normalizedReference = playerReference.trim()
@@ -1176,6 +1089,8 @@ function App() {
     const normalizedReference = reference.trim()
     if (!normalizedReference) return
 
+    const requestId = tournamentRequestRef.current + 1
+    tournamentRequestRef.current = requestId
     lastAnalyzedTournamentReferenceRef.current = normalizedReference
     setShowTournamentSearch(false)
     fieldPlacementRequestRef.current += 1
@@ -1198,13 +1113,15 @@ function App() {
 
     try {
       const result = await getTournamentSnapshot(normalizedReference, selectedClassId)
+      if (requestId !== tournamentRequestRef.current) return
       setSnapshot(result)
       updateSharedLocation({ mode: 'tournament', tournament: normalizedReference, classId: result.selectedClass.id })
       setSearchTerm('')
     } catch (caught) {
+      if (requestId !== tournamentRequestRef.current) return
       setError(caught instanceof Error ? caught.message : 'The tournament could not be loaded.')
     } finally {
-      setIsAnalyzing(false)
+      if (requestId === tournamentRequestRef.current) setIsAnalyzing(false)
     }
   }
 
@@ -1284,16 +1201,12 @@ function App() {
   }
 
   function selectPlayerSearchResult(player: PlayerSearchResult) {
-    setPlayerSearchResults([])
-    setPlayerSearchError(null)
     setShowPlayerSearch(false)
     setPlayerReference(player.rankedInId)
     void analyzePlayer(player.rankedInId)
   }
 
   function selectTournamentSearchResult(tournament: TournamentSearchResult) {
-    setTournamentSearchResults([])
-    setTournamentSearchError(null)
     setTournamentUrl(String(tournament.id))
     void analyzeTournament(String(tournament.id))
   }
@@ -1492,6 +1405,7 @@ function App() {
   }
 
   function resetToHome() {
+    tournamentRequestRef.current += 1
     playerRequestRef.current += 1
     setActiveMode('tournament')
     fieldPlacementRequestRef.current += 1
@@ -1509,6 +1423,9 @@ function App() {
     setFieldLeagueDivisionsLoaded(false)
     setFieldLeagueDivisionError(null)
     setIsLoadingFieldLeagueDivisions(false)
+    setIsAnalyzing(false)
+    setIsLoadingClass(false)
+    setIsLoadingPair(false)
     setSearchTerm('')
     setError(null)
     setPlayerProfile(null)
@@ -1521,8 +1438,6 @@ function App() {
     setPlayerLoadingStage(null)
     setShowPlayerSearch(false)
     setShowTournamentSearch(false)
-    setPlayerSearchResults([])
-    setPlayerSearchError(null)
     setShareCopied(false)
     updateSharedLocation({ mode: 'tournament' })
   }
@@ -1530,12 +1445,16 @@ function App() {
   function switchMode(nextMode: WorkspaceMode) {
     if (nextMode === activeMode) return
 
+    tournamentRequestRef.current += 1
+    playerRequestRef.current += 1
     fieldPlacementRequestRef.current += 1
     fieldLeagueRequestRef.current += 1
+    setIsAnalyzing(false)
+    setIsLoadingClass(false)
+    setIsLoadingPair(false)
     setIsLoadingFieldPlacements(false)
     setIsLoadingFieldLeagueDivisions(false)
     if (nextMode === 'tournament') {
-      playerRequestRef.current += 1
       setIsAnalyzingPlayer(false)
       setPlayerLoadingStage(null)
     }
@@ -1708,12 +1627,12 @@ function App() {
                 </div>
                 {activeMode === 'tournament' && showTournamentSearch && !isDirectTournamentReference(tournamentUrl) && (
                   <div className="tournament-search-panel" role="status">
-                    {isSearchingTournaments && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching public Rankedin tournaments…</p>}
-                    {tournamentSearchError && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {tournamentSearchError}</p>}
-                    {!isSearchingTournaments && !tournamentSearchError && tournamentUrl.trim().length >= 2 && !tournamentSearchResults.length && <p className="player-search-status">No public tournaments matched that name.</p>}
-                    {!!tournamentSearchResults.length && (
+                    {tournamentSearch.isSearching && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching public Rankedin tournaments…</p>}
+                    {tournamentSearch.error && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {tournamentSearch.error}</p>}
+                    {!tournamentSearch.isSearching && !tournamentSearch.error && tournamentUrl.trim().length >= 2 && !tournamentSearch.results.length && <p className="player-search-status">No public tournaments matched that name.</p>}
+                    {!!tournamentSearch.results.length && (
                       <div className="tournament-search-results" role="listbox" aria-label="Tournament search results">
-                        {tournamentSearchResults.map((tournament) => (
+                        {tournamentSearch.results.map((tournament) => (
                           <button className="tournament-search-result" type="button" role="option" key={`${tournament.id}-${tournament.startDate}`} onClick={() => selectTournamentSearchResult(tournament)}>
                             <span className="tournament-search-result-name">{tournament.name}</span>
                             <span className="tournament-search-result-meta">{tournament.startDate || 'Date unavailable'} · {tournament.sport ?? 'Sport unavailable'}</span>
@@ -1725,12 +1644,12 @@ function App() {
                 )}
                 {activeMode === 'player' && showPlayerSearch && !isDirectPlayerReference(playerReference) && (
                   <div className="player-search-panel">
-                    {isSearchingPlayers && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching public Rankedin profiles…</p>}
-                    {playerSearchError && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {playerSearchError}</p>}
-                    {!isSearchingPlayers && !playerSearchError && playerReference.trim().length >= 2 && !isDirectPlayerReference(playerReference) && !playerSearchResults.length && <p className="player-search-status">No public players matched that name.</p>}
-                    {!!playerSearchResults.length && (
+                    {playerSearch.isSearching && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching public Rankedin profiles…</p>}
+                    {playerSearch.error && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {playerSearch.error}</p>}
+                    {!playerSearch.isSearching && !playerSearch.error && playerReference.trim().length >= 2 && !isDirectPlayerReference(playerReference) && !playerSearch.results.length && <p className="player-search-status">No public players matched that name.</p>}
+                    {!!playerSearch.results.length && (
                       <div className="player-search-results" role="listbox" aria-label="Player search results">
-                        {playerSearchResults.map((player) => (
+                        {playerSearch.results.map((player) => (
                           <button className="player-search-result" type="button" role="option" key={player.rankedInId} onClick={() => selectPlayerSearchResult(player)}>
                             <span className="player-search-result-name">{player.name}</span>
                             <span className="player-search-result-id">{player.rankedInId}</span>

@@ -5,6 +5,7 @@ Rankedin Explorer is a read-only React/Vite site for making public Rankedin tour
 ## Repository map
 
 - `src/App.tsx` — application composition and user-facing interaction state.
+- `src/hooks/usePublicSearch.ts` — shared debounced, cancellable public search lifecycle.
 - `src/lib/rankedin.ts` — Rankedin API client, response normalization and analysis workflow.
 - `src/lib/exports.ts` — browser-only tournament report model and CSV/JSON downloads.
 - `src/lib/preferences.ts` — versioned, lightweight local preference storage.
