@@ -23,23 +23,23 @@ import {
   X,
 } from 'lucide-react'
 import {
-  getEventMatches,
   getClassParticipants,
   getPlayerAnalysis,
+  getPlayerCurrentLeagueDivision,
   getPlayerLeagueAnalysis,
   getPlayerProfile,
+  normalizeCompetitionClassName,
   searchPlayersByName,
   searchTournamentsByName,
   getTournamentSnapshot,
-  type MatchRecord,
   type PairRecord,
   type PlayerAnalysis,
   type PlayerEventAnalysis,
   type PlayerLeagueAnalysis,
+  type PlayerLeagueDivision,
   type LeagueSeasonAnalysis,
   type LeagueStandingSnapshot,
   type PlayerProfile,
-  type PlayerRecord,
   type PlayerSearchResult,
   type TournamentSearchResult,
   type TournamentSnapshot,
@@ -50,6 +50,22 @@ import {
   savePreferences,
   type Preferences,
 } from './lib/preferences'
+import { MetricCard } from './components/MetricCard'
+import {
+  FieldClassSummaryGrid,
+  FieldLeagueDivisionSummary,
+} from './components/FieldBreakdown'
+import { summarizeFieldLeagueDivisions, type FieldClassSummary } from './lib/fieldBreakdown'
+import {
+  compactClassName,
+  dateTimestamp,
+  formatCompactDate,
+  formatDate,
+  formatRating,
+  ordinalPosition,
+  placementSummaryPosition,
+} from './lib/formatters'
+import { PlayerHistoryColumn } from './components/PlayerHistoryColumn'
 import './App.css'
 
 const PLAYER_PROGRESS_HISTORY_LIMIT = 25
@@ -118,103 +134,11 @@ function isDirectPlayerReference(value: string) {
   return /^R\d+$/i.test(trimmed) || /\/player\/R\d+/i.test(trimmed)
 }
 
-function formatDate(value: string) {
-  if (!value) return '—'
-  return new Intl.DateTimeFormat('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date(value))
-}
-
-function formatRating(value: number | null) {
-  return value === null ? '—' : value.toFixed(2)
-}
-
-function formatCompactDate(value: string) {
-  const timestamp = dateTimestamp(value)
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return 'Unknown date'
-  return new Intl.DateTimeFormat('en-GB', {
-    day: '2-digit',
-    month: 'numeric',
-    year: 'numeric',
-  }).format(date)
-}
-
-function dateTimestamp(value: string) {
-  const rankedInDate = value.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?$/)
-  if (!rankedInDate) return new Date(value).getTime()
-  return new Date(`${rankedInDate[3]}-${rankedInDate[2]}-${rankedInDate[1]}T${rankedInDate[4] ?? '00'}:${rankedInDate[5] ?? '00'}:00`).getTime()
-}
-
 function pairRating(pair: PairRecord) {
   const ratings = [pair.first.rating, pair.second.rating].filter(
     (rating): rating is number => rating !== null,
   )
   return ratings.length ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length : null
-}
-
-function initials(name: string) {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase()
-}
-
-function placementPosition(event: PlayerEventAnalysis) {
-  if (event.standing === null) return '—'
-  if (event.standingRangeTo && event.standingRangeTo !== event.standing) {
-    return `${event.standing}–${event.standingRangeTo}`
-  }
-  return String(event.standing)
-}
-
-function ordinalPosition(value: number | null) {
-  if (value === null) return '—'
-  const remainder = value % 100
-  const suffix = remainder >= 11 && remainder <= 13
-    ? 'th'
-    : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[value % 10] ?? 'th'
-  return `${value}${suffix}`
-}
-
-function placementSummaryPosition(event: PlayerEventAnalysis) {
-  if (event.standing === null) return '—'
-  if (event.standingRangeTo && event.standingRangeTo !== event.standing) {
-    return `${ordinalPosition(event.standing)}–${ordinalPosition(event.standingRangeTo)}`
-  }
-  return ordinalPosition(event.standing)
-}
-
-function placementField(event: PlayerEventAnalysis) {
-  return event.fieldSize ? `of ${event.fieldSize} pairs` : 'field size unavailable'
-}
-
-function compactClassName(className: string | null) {
-  if (!className) return 'Class unavailable'
-  const cleanedName = className
-    .replace(/\s*\([^)]*\)/g, '')
-    .replace(/\s*-\s*(?:formiddag|eftermiddag|ftm|først til mølle).*$/i, '')
-    .replace(/\s*-\s*maks.*$/i, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  const dpfMatch = className.match(/\bDPF\s*(\d+)\b/i)
-  if (!dpfMatch) return cleanedName
-
-  const hasMix = /\bmix\b/i.test(className)
-  const hasWomen = /\b(?:kvinder?|damer?|women?|female)\b/i.test(className)
-  const hasMen = /\b(?:herrer?|men|male)\b/i.test(className)
-  let gender: 'Mix' | 'Kvinder' | 'Herrer' | null = null
-  if (hasMix) gender = 'Mix'
-  if (!gender && hasWomen) gender = 'Kvinder'
-  if (!gender && hasMen) gender = 'Herrer'
-  if (!gender) return `DPF${dpfMatch[1]} (gender not listed)`
-  if (gender === 'Mix') return `DPF${dpfMatch[1]} Mix`
-  return `DPF${dpfMatch[1]} ${gender}`
 }
 
 function fieldPlacementEvents(analysis: PlayerAnalysis | null) {
@@ -246,13 +170,6 @@ function fieldPlacementSummary(event: PlayerEventAnalysis) {
   }
 }
 
-type FieldClassSummary = {
-  className: string
-  averageTopPercent: number
-  resultCount: number
-  playerCount: number
-}
-
 type ProgressPoint = {
   event: PlayerEventAnalysis
   className: string
@@ -271,7 +188,7 @@ type ProgressRegression = {
   endPercentage: number
 }
 
-const progressSeriesColors = ['#587866', '#1f6b82', '#d56e59', '#8b6f47', '#6b638c']
+const progressSeriesColors = ['var(--sage)', 'var(--blue)', 'var(--coral)', 'var(--chart-4)', 'var(--chart-5)']
 
 function progressPoints(events: PlayerEventAnalysis[]) {
   return events
@@ -366,7 +283,12 @@ function averagePlacement(event: PlayerEventAnalysis) {
 }
 
 function summarizeFieldPlacements(analyses: Record<number, PlayerAnalysis | null>) {
-  const groups = new Map<string, { percentages: number[]; players: Set<number> }>()
+  const groups = new Map<string, {
+    className: string
+    kind: ReturnType<typeof normalizeCompetitionClassName>['kind']
+    percentages: number[]
+    players: Set<number>
+  }>()
 
   Object.values(analyses).forEach((analysis) => {
     if (!analysis) return
@@ -375,190 +297,30 @@ function summarizeFieldPlacements(analyses: Record<number, PlayerAnalysis | null
       const percentage = averagePlacement(event)
       if (percentage === null) return
 
-      const className = compactClassName(event.className)
-      const group = groups.get(className) ?? { percentages: [], players: new Set<number>() }
+      const normalizedClass = normalizeCompetitionClassName(event.className)
+      const groupKey = `${normalizedClass.kind}:${normalizedClass.name}`
+      const group = groups.get(groupKey) ?? {
+        className: normalizedClass.name,
+        kind: normalizedClass.kind,
+        percentages: [],
+        players: new Set<number>(),
+      }
       group.percentages.push(percentage)
       group.players.add(analysis.playerId)
-      groups.set(className, group)
+      groups.set(groupKey, group)
     })
   })
 
-  return Array.from(groups, ([className, group]): FieldClassSummary => ({
-    className,
+  return Array.from(groups.values(), (group): FieldClassSummary => ({
+    className: group.className,
+    kind: group.kind,
     averageTopPercent: group.percentages.reduce((sum, value) => sum + value, 0) / group.percentages.length,
     resultCount: group.percentages.length,
     playerCount: group.players.size,
-  })).sort((first, second) => first.averageTopPercent - second.averageTopPercent)
-}
-
-function matchRecord(matches: PlayerEventAnalysis['matches']) {
-  const wins = matches.filter((match) => match.won === true).length
-  const losses = matches.filter((match) => match.won === false).length
-  return { wins, losses }
-}
-
-type PlayerHistoryColumnProps = {
-  player: PlayerRecord
-  analysis: PlayerAnalysis | null
-  error: string | null
-  isLoading: boolean
-  showContext: boolean
-}
-
-function PlayerHistoryColumn({
-  player,
-  analysis,
-  error,
-  isLoading,
-  showContext,
-}: PlayerHistoryColumnProps) {
-  const [matchStates, setMatchStates] = useState<Record<number, {
-    matches: MatchRecord[] | null
-    error: string | null
-    isLoading: boolean
-  }>>({})
-  const events = analysis?.events ?? []
-  const matches = events.flatMap((event) => matchStates[event.id]?.matches ?? event.matches)
-  const record = matchRecord(matches)
-
-  useEffect(() => {
-    setMatchStates({})
-  }, [analysis?.playerId])
-
-  async function loadMatchDetails(event: PlayerEventAnalysis) {
-    if (!event.matchQuery || matchStates[event.id]?.isLoading || matchStates[event.id]?.matches) return
-
-    setMatchStates((current) => ({
-      ...current,
-      [event.id]: { matches: null, error: null, isLoading: true },
-    }))
-
-    try {
-      const eventMatches = await getEventMatches(
-        event.matchQuery.tournamentId,
-        event.matchQuery.classId,
-        player.id,
-      )
-      setMatchStates((current) => ({
-        ...current,
-        [event.id]: { matches: eventMatches, error: null, isLoading: false },
-      }))
-    } catch (caught) {
-      setMatchStates((current) => ({
-        ...current,
-        [event.id]: {
-          matches: null,
-          error: caught instanceof Error ? caught.message : 'Match details could not be loaded.',
-          isLoading: false,
-        },
-      }))
-    }
-  }
-
-  return (
-    <section className="player-history-column">
-      <div className="player-history-header">
-        <div className="avatar">{initials(player.name)}</div>
-        <div className="player-history-name">
-          <strong>{player.name}</strong>
-          <span>Rating at target event: {formatRating(player.rating)}</span>
-        </div>
-        <a
-          className="player-profile-link"
-          href={`https://www.rankedin.com${player.url}`}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={`Open ${player.name} on Rankedin`}
-        >
-          <ArrowUpRight size={15} />
-        </a>
-      </div>
-
-      {isLoading && (
-        <div className="loading-state">
-          <LoaderCircle className="spin" size={19} /> Reading event history…
-        </div>
-      )}
-      {error && <div className="error-banner small" role="alert"><CircleHelp size={15} /> {error}</div>}
-
-      {!isLoading && analysis && (
-        <>
-          <div className="trace-metrics">
-            <div><strong>{events.filter((event) => event.className).length}</strong><span>events found</span></div>
-            <div><strong>{matches.length || '—'}</strong><span>matches loaded</span></div>
-            <div><strong>{matches.length ? `${record.wins}–${record.losses}` : '—'}</strong><span>loaded record</span></div>
-          </div>
-
-          <div className="placement-list">
-            <div className="placement-list-heading">
-              <span>FINISHED EVENTS</span>
-              <span>LAST {events.length}</span>
-            </div>
-            {events.map((event) => {
-              const eventMatches = matchStates[event.id]?.matches ?? event.matches
-              const eventMatchState = matchStates[event.id]
-              const eventRecord = matchRecord(eventMatches)
-              return (
-                <article className="placement-item" key={`${player.id}-${event.id}`}>
-                  <div className="placement-result">
-                    <strong>{placementPosition(event)}</strong>
-                    <span>{placementField(event)}</span>
-                  </div>
-                  <div className="placement-event">
-                    <div className="placement-event-title">
-                      <strong>{event.name}</strong>
-                      <span>{formatDate(event.startDate)}</span>
-                    </div>
-                    <span className="placement-class">{event.className ? compactClassName(event.className) : 'Class result not published'}</span>
-                    <span className="placement-partner">
-                      {event.partner ? `With ${event.partner}` : 'Partner unavailable'}
-                      {eventMatches.length ? ` · ${eventRecord.wins}–${eventRecord.losses} in matches` : ''}
-                    </span>
-                    {event.matchQuery ? (
-                      <details className="match-details" open={showContext}>
-                        <summary>
-                          <span>Explore match details</span>
-                          <span>{eventMatches.length ? `${eventMatches.length} ${eventMatches.length === 1 ? 'match' : 'matches'}` : 'load matches'}</span>
-                        </summary>
-                        {eventMatches.length > 0 ? (
-                          <div className="match-details-list">
-                            {eventMatches.map((match) => (
-                              <div className="match-detail-row" key={match.id}>
-                                <span className={`match-result ${match.won === true ? 'win' : match.won === false ? 'loss' : ''}`}>
-                                  {match.won === true ? 'W' : match.won === false ? 'L' : '—'}
-                                </span>
-                                <div className="match-detail-opponent">
-                                  <strong>{match.opponents.length ? `vs ${match.opponents.join(' + ')}` : 'Opponent unavailable'}</strong>
-                                  <span>{match.draw || match.className}</span>
-                                </div>
-                                <span className="match-detail-score">{match.score}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="match-loader">
-                            {eventMatchState?.error && <span className="match-load-error">{eventMatchState.error}</span>}
-                            {!eventMatchState?.error && <span>Match-by-match details are fetched only when requested.</span>}
-                            <button type="button" onClick={() => void loadMatchDetails(event)} disabled={eventMatchState?.isLoading}>
-                              {eventMatchState?.isLoading ? <LoaderCircle className="spin" size={13} /> : <Search size={13} />}
-                              {eventMatchState?.isLoading ? 'Loading…' : 'Load match details'}
-                            </button>
-                          </div>
-                        )}
-                      </details>
-                    ) : (
-                      <span className="placement-partner">No public match details</span>
-                    )}
-                  </div>
-                </article>
-              )
-            })}
-            {!events.length && <p className="empty-history">No finished events were found for this player.</p>}
-          </div>
-        </>
-      )}
-    </section>
-  )
+  })).sort((first, second) => (
+    Number(first.kind === 'other') - Number(second.kind === 'other')
+      || first.averageTopPercent - second.averageTopPercent
+  ))
 }
 
 type ProgressChartProps = {
@@ -1058,26 +820,10 @@ function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueErro
       {analysis && (
         <>
           <section className="metric-grid progress-metric-grid" aria-label="Player progress summary">
-            <div className="metric-card metric-card-dark">
-              <div className="metric-label"><Trophy size={15} /> RESULTS CHARTED</div>
-              <strong>{points.length}</strong>
-              <span>finished tournament placements</span>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label"><Users size={15} /> LEVELS IN HISTORY</div>
-              <strong>{series.length}</strong>
-              <span>level / class series</span>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label"><Gauge size={15} /> AVERAGE FINISH</div>
-              <strong>{formatPercent(average)}</strong>
-              <span>lower is better</span>
-            </div>
-            <div className="metric-card">
-              <div className="metric-label"><CalendarDays size={15} /> LATEST RESULT</div>
-              <strong>{latestPoint ? formatPercent(latestPoint.percentage) : '—'}</strong>
-              <span>{latestPoint ? formatCompactDate(latestPoint.event.startDate) : 'no comparable result'}</span>
-            </div>
+            <MetricCard dark icon={<Trophy size={15} />} label="RESULTS CHARTED" value={points.length} detail="finished tournament placements" />
+            <MetricCard icon={<Users size={15} />} label="LEVELS IN HISTORY" value={series.length} detail="level / class series" />
+            <MetricCard icon={<Gauge size={15} />} label="AVERAGE FINISH" value={formatPercent(average)} detail="lower is better" />
+            <MetricCard icon={<CalendarDays size={15} />} label="LATEST RESULT" value={latestPoint ? formatPercent(latestPoint.percentage) : '—'} detail={latestPoint ? formatCompactDate(latestPoint.event.startDate) : 'no comparable result'} />
           </section>
 
           <section className="field-card progress-card">
@@ -1178,6 +924,10 @@ function App() {
   const [fieldPlacementsLoaded, setFieldPlacementsLoaded] = useState(false)
   const [isLoadingFieldPlacements, setIsLoadingFieldPlacements] = useState(false)
   const [fieldPlacementError, setFieldPlacementError] = useState<string | null>(null)
+  const [fieldLeagueDivisions, setFieldLeagueDivisions] = useState<Record<number, PlayerLeagueDivision | null>>({})
+  const [fieldLeagueDivisionsLoaded, setFieldLeagueDivisionsLoaded] = useState(false)
+  const [isLoadingFieldLeagueDivisions, setIsLoadingFieldLeagueDivisions] = useState(false)
+  const [fieldLeagueDivisionError, setFieldLeagueDivisionError] = useState<string | null>(null)
   const [showPlayerSearch, setShowPlayerSearch] = useState(false)
   const [playerSearchResults, setPlayerSearchResults] = useState<PlayerSearchResult[]>([])
   const [isSearchingPlayers, setIsSearchingPlayers] = useState(false)
@@ -1188,6 +938,7 @@ function App() {
   const [showTournamentSearch, setShowTournamentSearch] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
   const fieldPlacementRequestRef = useRef(0)
+  const fieldLeagueRequestRef = useRef(0)
   const playerRequestRef = useRef(0)
   const playerSearchRequestRef = useRef(0)
   const tournamentSearchRequestRef = useRef(0)
@@ -1212,7 +963,7 @@ function App() {
   }, [initialLocation])
 
   useEffect(() => {
-    function closeSearchMenus(event: PointerEvent) {
+    function closeSearchMenus(event: MouseEvent) {
       if (!(event.target instanceof Node)) return
       if (!searchAnchorRef.current?.contains(event.target)) {
         setShowPlayerSearch(false)
@@ -1220,8 +971,8 @@ function App() {
       }
     }
 
-    document.addEventListener('pointerdown', closeSearchMenus)
-    return () => document.removeEventListener('pointerdown', closeSearchMenus)
+    document.addEventListener('click', closeSearchMenus)
+    return () => document.removeEventListener('click', closeSearchMenus)
   }, [])
 
   useEffect(() => {
@@ -1234,23 +985,41 @@ function App() {
 
     if (activeMode !== 'player' || !showPlayerSearch || isDirectPlayerReference(normalizedTerm) || normalizedTerm.length < 2) return
 
-    const timeout = window.setTimeout(() => {
+    const controller = new AbortController()
+    let disposed = false
+    let didTimeout = false
+    let searchTimeout = 0
+    const debounceTimeout = window.setTimeout(() => {
       setIsSearchingPlayers(true)
-      void searchPlayersByName(normalizedTerm)
+      searchTimeout = window.setTimeout(() => {
+        didTimeout = true
+        controller.abort()
+      }, 8000)
+      void searchPlayersByName(normalizedTerm, 8, controller.signal)
         .then((results) => {
-          if (requestId !== playerSearchRequestRef.current) return
+          if (disposed || requestId !== playerSearchRequestRef.current) return
           setPlayerSearchResults(results)
         })
         .catch((caught) => {
-          if (requestId !== playerSearchRequestRef.current) return
+          if (disposed || requestId !== playerSearchRequestRef.current) return
+          if (caught instanceof Error && caught.name === 'AbortError') {
+            if (didTimeout) setPlayerSearchError('Player search timed out. Try again.')
+            return
+          }
           setPlayerSearchError(caught instanceof Error ? caught.message : 'Player search could not be completed.')
         })
         .finally(() => {
-          if (requestId === playerSearchRequestRef.current) setIsSearchingPlayers(false)
+          window.clearTimeout(searchTimeout)
+          if (!disposed && requestId === playerSearchRequestRef.current) setIsSearchingPlayers(false)
         })
     }, 280)
 
-    return () => window.clearTimeout(timeout)
+    return () => {
+      disposed = true
+      window.clearTimeout(debounceTimeout)
+      window.clearTimeout(searchTimeout)
+      controller.abort()
+    }
   }, [activeMode, playerReference, showPlayerSearch])
 
   useEffect(() => {
@@ -1263,23 +1032,41 @@ function App() {
 
     if (activeMode !== 'tournament' || isDirectTournamentReference(normalizedTerm) || normalizedTerm.length < 2) return
 
-    const timeout = window.setTimeout(() => {
+    const controller = new AbortController()
+    let disposed = false
+    let didTimeout = false
+    let searchTimeout = 0
+    const debounceTimeout = window.setTimeout(() => {
       setIsSearchingTournaments(true)
-      void searchTournamentsByName(normalizedTerm)
+      searchTimeout = window.setTimeout(() => {
+        didTimeout = true
+        controller.abort()
+      }, 8000)
+      void searchTournamentsByName(normalizedTerm, 8, controller.signal)
         .then((results) => {
-          if (requestId !== tournamentSearchRequestRef.current) return
+          if (disposed || requestId !== tournamentSearchRequestRef.current) return
           setTournamentSearchResults(results)
         })
         .catch((caught) => {
-          if (requestId !== tournamentSearchRequestRef.current) return
+          if (disposed || requestId !== tournamentSearchRequestRef.current) return
+          if (caught instanceof Error && caught.name === 'AbortError') {
+            if (didTimeout) setTournamentSearchError('Tournament search timed out. Try again.')
+            return
+          }
           setTournamentSearchError(caught instanceof Error ? caught.message : 'Tournament search could not be completed.')
         })
         .finally(() => {
-          if (requestId === tournamentSearchRequestRef.current) setIsSearchingTournaments(false)
+          window.clearTimeout(searchTimeout)
+          if (!disposed && requestId === tournamentSearchRequestRef.current) setIsSearchingTournaments(false)
         })
     }, 280)
 
-    return () => window.clearTimeout(timeout)
+    return () => {
+      disposed = true
+      window.clearTimeout(debounceTimeout)
+      window.clearTimeout(searchTimeout)
+      controller.abort()
+    }
   }, [activeMode, tournamentUrl])
 
   useEffect(() => {
@@ -1317,6 +1104,7 @@ function App() {
   useEffect(() => {
     if (activeMode !== 'tournament' || !snapshot) return
     void loadFieldPlacements(snapshot.participants)
+    void loadFieldLeagueDivisions(snapshot.participants)
   }, [activeMode, snapshot])
 
   const visibleParticipants = useMemo(() => {
@@ -1341,6 +1129,13 @@ function App() {
     () => summarizeFieldPlacements(fieldPlacementSummaries),
     [fieldPlacementSummaries],
   )
+  const normalizedFieldClassSummaries = fieldClassSummaries.filter((summary) => summary.kind !== 'other')
+  const otherFieldClassSummaries = fieldClassSummaries.filter((summary) => summary.kind === 'other')
+  const fieldLeagueSummary = useMemo(
+    () => summarizeFieldLeagueDivisions(fieldLeagueDivisions),
+    [fieldLeagueDivisions],
+  )
+  const isLoadingFieldData = isLoadingFieldPlacements || isLoadingFieldLeagueDivisions
 
   async function analyzeTournament(reference = tournamentUrl, selectedClassId?: number) {
     const normalizedReference = reference.trim()
@@ -1349,6 +1144,7 @@ function App() {
     lastAnalyzedTournamentReferenceRef.current = normalizedReference
     setShowTournamentSearch(false)
     fieldPlacementRequestRef.current += 1
+    fieldLeagueRequestRef.current += 1
     setIsAnalyzing(true)
     setError(null)
     setShareCopied(false)
@@ -1358,6 +1154,10 @@ function App() {
     setFieldPlacementsLoaded(false)
     setFieldPlacementError(null)
     setIsLoadingFieldPlacements(false)
+    setFieldLeagueDivisions({})
+    setFieldLeagueDivisionsLoaded(false)
+    setFieldLeagueDivisionError(null)
+    setIsLoadingFieldLeagueDivisions(false)
     setTournamentUrl(normalizedReference)
     updateSharedLocation({ mode: 'tournament', tournament: normalizedReference, classId: selectedClassId })
 
@@ -1497,6 +1297,7 @@ function App() {
 
     setIsLoadingClass(true)
     fieldPlacementRequestRef.current += 1
+    fieldLeagueRequestRef.current += 1
     setError(null)
 
     try {
@@ -1508,6 +1309,10 @@ function App() {
       setFieldPlacementsLoaded(false)
       setFieldPlacementError(null)
       setIsLoadingFieldPlacements(false)
+      setFieldLeagueDivisions({})
+      setFieldLeagueDivisionsLoaded(false)
+      setFieldLeagueDivisionError(null)
+      setIsLoadingFieldLeagueDivisions(false)
       updateSharedLocation({ mode: 'tournament', tournament: tournamentUrl, classId: nextClass.id })
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'This class could not be loaded.')
@@ -1595,10 +1400,44 @@ function App() {
     setIsLoadingFieldPlacements(false)
   }
 
+  async function loadFieldLeagueDivisions(participants: PairRecord[]) {
+    const requestId = fieldLeagueRequestRef.current + 1
+    fieldLeagueRequestRef.current = requestId
+    const players = participants.flatMap((pair) => [pair.first, pair.second])
+    setIsLoadingFieldLeagueDivisions(true)
+    setFieldLeagueDivisionError(null)
+    setFieldLeagueDivisions({})
+    setFieldLeagueDivisionsLoaded(false)
+
+    const results = await Promise.allSettled(players.map((player) => getPlayerCurrentLeagueDivision(player.id)))
+    const divisions: Record<number, PlayerLeagueDivision | null> = {}
+    let failedCount = 0
+
+    results.forEach((result, index) => {
+      const player = players[index]
+      if (result.status === 'fulfilled') {
+        divisions[player.id] = result.value
+        return
+      }
+      divisions[player.id] = null
+      failedCount += 1
+    })
+
+    if (requestId !== fieldLeagueRequestRef.current) return
+
+    setFieldLeagueDivisions(divisions)
+    setFieldLeagueDivisionsLoaded(true)
+    if (failedCount) {
+      setFieldLeagueDivisionError(`${failedCount} player ${failedCount === 1 ? 'division was' : 'divisions were'} unavailable.`)
+    }
+    setIsLoadingFieldLeagueDivisions(false)
+  }
+
   function resetToHome() {
     playerRequestRef.current += 1
     setActiveMode('tournament')
     fieldPlacementRequestRef.current += 1
+    fieldLeagueRequestRef.current += 1
     setSnapshot(null)
     setTournamentUrl('')
     setPlayerReference('')
@@ -1608,6 +1447,10 @@ function App() {
     setFieldPlacementsLoaded(false)
     setFieldPlacementError(null)
     setIsLoadingFieldPlacements(false)
+    setFieldLeagueDivisions({})
+    setFieldLeagueDivisionsLoaded(false)
+    setFieldLeagueDivisionError(null)
+    setIsLoadingFieldLeagueDivisions(false)
     setSearchTerm('')
     setError(null)
     setPlayerProfile(null)
@@ -1630,7 +1473,9 @@ function App() {
     if (nextMode === activeMode) return
 
     fieldPlacementRequestRef.current += 1
+    fieldLeagueRequestRef.current += 1
     setIsLoadingFieldPlacements(false)
+    setIsLoadingFieldLeagueDivisions(false)
     if (nextMode === 'tournament') {
       playerRequestRef.current += 1
       setIsAnalyzingPlayer(false)
@@ -1874,26 +1719,10 @@ function App() {
         </section>
 
         <section className="metric-grid" aria-label="Field summary">
-          <div className="metric-card metric-card-dark">
-            <div className="metric-label"><Users size={15} /> REGISTERED IN CLASS</div>
-            <strong>{snapshot.participants.length * 2}</strong>
-            <span>players / {snapshot.participants.length} pairs</span>
-          </div>
-          <div className="metric-card">
-            <div className="metric-label"><Trophy size={15} /> CLASSES IN EVENT</div>
-            <strong>{snapshot.classes.length}</strong>
-            <span>competition levels visible</span>
-          </div>
-          <div className="metric-card">
-            <div className="metric-label"><Gauge size={15} /> AVERAGE SKILL</div>
-            <strong>{formatRating(averageRating)}</strong>
-            <span>historical rating at entry</span>
-          </div>
-          <div className="metric-card">
-            <div className="metric-label"><Activity size={15} /> FIELD SPREAD</div>
-            <strong>{ratingSpread === null ? '—' : ratingSpread.toFixed(2)}</strong>
-            <span>highest vs lowest average</span>
-          </div>
+          <MetricCard dark icon={<Users size={15} />} label="REGISTERED IN CLASS" value={snapshot.participants.length * 2} detail={`players / ${snapshot.participants.length} pairs`} />
+          <MetricCard icon={<Trophy size={15} />} label="CLASSES IN EVENT" value={snapshot.classes.length} detail="competition levels visible" />
+          <MetricCard icon={<Gauge size={15} />} label="AVERAGE SKILL" value={formatRating(averageRating)} detail="historical rating at entry" />
+          <MetricCard icon={<Activity size={15} />} label="FIELD SPREAD" value={ratingSpread === null ? '—' : ratingSpread.toFixed(2)} detail="highest vs lowest average" />
         </section>
 
         <section className="dashboard-grid">
@@ -1905,19 +1734,22 @@ function App() {
                 <p>{snapshot.selectedClass.name.includes('(') ? snapshot.selectedClass.name.match(/\(([^)]+)\)/)?.[1] : 'Selected class'} <span className="muted-divider">/</span> {snapshot.participants.length} pairs visible</p>
               </div>
               <div className="field-card-tools">
-                <div className={`placement-load-status ${isLoadingFieldPlacements ? 'is-loading' : ''}`} aria-live="polite">
-                  {isLoadingFieldPlacements ? <LoaderCircle className="spin" size={14} /> : <History size={14} />}
+                <div className={`placement-load-status ${isLoadingFieldData ? 'is-loading' : ''}`} aria-live="polite">
+                  {isLoadingFieldData ? <LoaderCircle className="spin" size={14} /> : <History size={14} />}
                   {isLoadingFieldPlacements
                     ? `Reading latest 5 · ${Object.keys(fieldPlacementSummaries).length}/${snapshot.participants.length * 2} players…`
-                    : fieldPlacementsLoaded ? 'Latest 5 per player' : 'Placement summary unavailable'}
+                    : isLoadingFieldLeagueDivisions
+                      ? 'Reading current divisions…'
+                      : fieldPlacementsLoaded ? 'Latest 5 per player' : 'Placement summary unavailable'}
                 </div>
                 <div className="class-picker-wrap">
-                  <select value={snapshot.selectedClass.id} onChange={(event) => void chooseClass(Number(event.target.value))} disabled={isLoadingClass || isLoadingFieldPlacements} aria-label="Choose tournament class">
+                  <select value={snapshot.selectedClass.id} onChange={(event) => void chooseClass(Number(event.target.value))} disabled={isLoadingClass || isLoadingFieldData} aria-label="Choose tournament class">
                     {snapshot.classes.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
                   </select>
                   {isLoadingClass ? <LoaderCircle className="picker-loader spin" size={15} /> : <ChevronDown className="picker-chevron" size={15} />}
                 </div>
                 {fieldPlacementError && <span className="placement-load-note">{fieldPlacementError}</span>}
+                {fieldLeagueDivisionError && <span className="placement-load-note">{fieldLeagueDivisionError}</span>}
               </div>
             </div>
 
@@ -1931,25 +1763,41 @@ function App() {
                   <span>lower is better</span>
                 </div>
                 {fieldClassSummaries.length ? (
-                  <div className="field-aggregate-grid">
-                    {fieldClassSummaries.map((summary) => {
-                      const percentage = Math.round(summary.averageTopPercent * 100)
-                      return (
-                        <article className="field-aggregate-card" key={summary.className}>
-                          <span className="field-aggregate-class">{summary.className}</span>
-                          <strong>Top {percentage}%</strong>
-                          <span>{summary.resultCount} results · {summary.playerCount} players</span>
-                          <div className="field-aggregate-scale" aria-hidden="true">
-                            <span className="field-aggregate-marker" style={{ left: `${percentage}%` }} />
-                          </div>
-                        </article>
-                      )
-                    })}
-                  </div>
+                  <>
+                    {!!normalizedFieldClassSummaries.length && (
+                      <FieldClassSummaryGrid summaries={normalizedFieldClassSummaries} />
+                    )}
+                    {!!otherFieldClassSummaries.length && (
+                      <div className="field-aggregate-other">
+                        <div className="field-aggregate-other-heading">
+                          <div className="section-kicker">OTHER / UNCLASSIFIED CLASSES</div>
+                          <span>Source label kept as provided</span>
+                        </div>
+                        <FieldClassSummaryGrid summaries={otherFieldClassSummaries} />
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <p className="field-aggregate-empty">No comparable finished placements were found yet.</p>
                 )}
                 <p className="field-aggregate-note"><Info size={13} /> Top percentage is placement divided by the finished field size; a lower percentage means a stronger average finish.</p>
+              </section>
+            )}
+
+            {(fieldLeagueDivisionsLoaded || Object.keys(fieldLeagueDivisions).length > 0) && (
+              <section className="field-aggregate league-field-summary" aria-label="Current Lunar League divisions">
+                <div className="field-aggregate-heading">
+                  <div>
+                    <div className="section-kicker">CURRENT LUNAR LEAGUE</div>
+                    <p>Players grouped by the division in their newest Lunar League season.</p>
+                  </div>
+                  <span>division only</span>
+                </div>
+                <FieldLeagueDivisionSummary
+                  divisions={fieldLeagueSummary.divisions}
+                  missingCount={fieldLeagueSummary.missingCount}
+                  totalPlayers={snapshot.participants.length * 2}
+                />
               </section>
             )}
 
@@ -1960,18 +1808,30 @@ function App() {
 
             <div className="table-scroll">
               <table className="roster-table">
-                <thead><tr><th>PAIR</th><th>LAST 5 / PLAYER</th><th>SKILL</th><th>RANK</th><th>FIELD SIGNAL</th><th aria-label="Actions" /></tr></thead>
+                <thead><tr><th>PAIR</th><th>LAST 5 / PLAYER</th><th>SKILL</th></tr></thead>
                 <tbody>
                   {visibleParticipants.map((pair, index) => {
                     const rating = pairRating(pair)
                     const selected = pair.id === selectedPairId
                     return (
-                      <tr className={selected ? 'selected-row' : ''} key={pair.id}>
+                      <tr
+                        className={selected ? 'selected-row' : ''}
+                        key={pair.id}
+                        tabIndex={0}
+                        aria-label={`View history for ${pair.first.name} and ${pair.second.name}`}
+                        onClick={() => void inspectPair(pair)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            void inspectPair(pair)
+                          }
+                        }}
+                      >
                         <td>
-                          <button className="pair-cell pair-select-button" type="button" onClick={() => void inspectPair(pair)}>
+                          <div className="pair-cell">
                             <span className="pair-index">{String(index + 1).padStart(2, '0')}</span>
                             <div><strong>{pair.first.name}</strong><span>{pair.second.name}</span></div>
-                          </button>
+                          </div>
                         </td>
                         <td>
                           <div className="field-placement-cell">
@@ -2010,13 +1870,10 @@ function App() {
                           </div>
                         </td>
                         <td><span className="rating-value">{formatRating(rating)}</span><span className="rating-caption">avg. start</span></td>
-                        <td>{pair.ranking === null ? <span className="empty-value">not published</span> : pair.ranking}</td>
-                        <td><span className={`signal-pill ${rating !== null && rating >= (averageRating ?? 0) ? 'signal-pill-strong' : ''}`}>{rating !== null && rating >= (averageRating ?? 0) ? 'above field avg.' : 'field baseline'}</span></td>
-                        <td><button className="row-action" type="button" onClick={() => void inspectPair(pair)} aria-label={`View history for ${pair.first.name} and ${pair.second.name}`}><ArrowUpRight size={16} /></button></td>
                       </tr>
                     )
                   })}
-                  {!visibleParticipants.length && <tr><td colSpan={6} className="empty-table">No pairs match that search.</td></tr>}
+                  {!visibleParticipants.length && <tr><td colSpan={3} className="empty-table">No pairs match that search.</td></tr>}
                 </tbody>
               </table>
             </div>

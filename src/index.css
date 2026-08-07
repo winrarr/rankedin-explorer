@@ -1,6 +1,6 @@
 :root {
-  color: #192126;
-  background: #f4f0e8;
+  color: var(--ink);
+  background: var(--paper);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -8,7 +8,7 @@
 }
 
 * { box-sizing: border-box; }
-html { min-width: 320px; background: #f4f0e8; }
+html { min-width: 320px; background: var(--paper); }
 body { min-width: 320px; margin: 0; }
 button, input, select { font: inherit; }
-button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #d56e59; outline-offset: 3px; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--coral); outline-offset: 3px; }

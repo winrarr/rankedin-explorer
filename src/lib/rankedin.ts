@@ -15,6 +15,16 @@ export type PlayerSearchResult = {
   name: string
 }
 
+export type WinLossRecord = {
+  wins: number
+  losses: number
+}
+
+export type PlayerDoublesStats = {
+  currentYear: WinLossRecord | null
+  career: WinLossRecord | null
+}
+
 export type TournamentSearchResult = {
   id: number
   name: string
@@ -29,6 +39,7 @@ export type PlayerProfile = PlayerRecord & {
   countryCode: string | null
   homeClubName: string | null
   homeClubUrl: string | null
+  doublesStats: PlayerDoublesStats
 }
 
 export type PairRecord = {
@@ -42,6 +53,13 @@ export type ClassOption = {
   id: number
   name: string
   participantsType?: number
+}
+
+export type CompetitionClassKind = 'dpf' | 'junior' | 'category' | 'league' | 'other'
+
+export type NormalizedCompetitionClass = {
+  name: string
+  kind: CompetitionClassKind
 }
 
 export type TournamentSnapshot = {
@@ -164,6 +182,10 @@ export type PlayerLeagueAnalysis = {
   seasons: LeagueSeasonAnalysis[]
 }
 
+export type PlayerLeagueDivision = {
+  divisionName: string
+}
+
 type RawPlayer = {
   Id: number
   RankedinId: string
@@ -223,6 +245,10 @@ type RawPlayerProfileResponse = {
   }
   FullName: string
   NameForRouting: string
+  Statistics?: {
+    WinLossDoublesCurrentYear?: string | null
+    CareerWinLossDoubles?: string | null
+  }
 }
 
 type RawStandingResponse = {
@@ -721,6 +747,64 @@ function sportName(sport: number) {
   return sports[sport] ?? 'Racket sport'
 }
 
+function cleanedCompetitionClassName(value: string) {
+  return value
+    .replace(/\s*\([^)]*\)/g, '')
+    .replace(/\s*-\s*(?:formiddag|eftermiddag|ftm|først til mølle).*$/i, '')
+    .replace(/\s*-\s*maks.*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function competitionClassGender(value: string) {
+  if (/\b(?:mix|mixed)\b/i.test(value)) return 'Mix'
+  if (/\b(?:girls?|piger?|flickor?)\b/i.test(value)) return 'Piger'
+  if (/\b(?:boys?|drenge?|pojkar?)\b/i.test(value)) return 'Drenge'
+  if (/\b(?:kvinder?|damer?|women?|female)\b/i.test(value)) return 'Kvinder'
+  if (/\b(?:herrer?|herre|men|male)\b/i.test(value)) return 'Herrer'
+  return null
+}
+
+function competitionClassAge(value: string) {
+  const underAge = value.match(/\bU\s*(\d{1,2})\b/i)
+  if (underAge) return Number(underAge[1])
+
+  const namedAge = value.match(/\b(?:boys?|girls?|drenge?|piger?|pojkar?|flickor?)\s*(\d{1,2})\b/i)
+  return namedAge ? Number(namedAge[1]) : null
+}
+
+export function normalizeCompetitionClassName(className: string | null): NormalizedCompetitionClass {
+  if (!className?.trim()) return { name: 'Class unavailable', kind: 'other' }
+
+  const cleanedName = cleanedCompetitionClassName(className)
+  if (/\blunar\s+(?:ligaen|league)\b/i.test(className)) {
+    return { name: 'Lunar League', kind: 'league' }
+  }
+
+  const levelMatch = className.match(/\b(?:DPF|DFP)\s*(\d{1,4})/i)
+  const level = levelMatch ? `DPF${Number(levelMatch[1])}` : null
+  const age = competitionClassAge(className)
+  const gender = competitionClassGender(className)
+
+  if (level) {
+    return {
+      name: [level, age ? `U${age}` : null, gender].filter(Boolean).join(' '),
+      kind: 'dpf',
+    }
+  }
+
+  if (age) {
+    return {
+      name: [`U${age}`, gender].filter(Boolean).join(' '),
+      kind: 'junior',
+    }
+  }
+
+  if (gender) return { name: gender, kind: 'category' }
+
+  return { name: cleanedName || 'Class unavailable', kind: 'other' }
+}
+
 export function parseTournamentReference(value: string) {
   const trimmed = value.trim()
   const directId = /^\d+$/.test(trimmed) ? Number(trimmed) : null
@@ -732,12 +816,13 @@ export function parseTournamentReference(value: string) {
   return { tournamentId: Number(match[1]) }
 }
 
-export async function searchTournamentsByName(term: string, take = 8): Promise<TournamentSearchResult[]> {
+export async function searchTournamentsByName(term: string, take = 8, signal?: AbortSignal): Promise<TournamentSearchResult[]> {
   const normalizedTerm = term.trim()
   if (!normalizedTerm) return []
 
   const response = await request<RawTournamentSearchResult[]>(
     `/Search/GetTournamentsAsync${query({ term: normalizedTerm, language: 'en', take, skip: 0 })}`,
+    signal,
   )
 
   return response.flatMap((tournament) => {
@@ -768,12 +853,19 @@ export function parsePlayerReference(value: string) {
   return { rankedInId }
 }
 
-export async function searchPlayersByName(term: string, take = 8): Promise<PlayerSearchResult[]> {
+export function parseWinLossRecord(value: string | null | undefined): WinLossRecord | null {
+  const match = value?.match(/^(\d+)\s*[-–]\s*(\d+)$/)
+  if (!match) return null
+  return { wins: Number(match[1]), losses: Number(match[2]) }
+}
+
+export async function searchPlayersByName(term: string, take = 8, signal?: AbortSignal): Promise<PlayerSearchResult[]> {
   const normalizedTerm = term.trim()
   if (!normalizedTerm) return []
 
   const response = await request<RawPlayerSearchResult[]>(
     `/Search/GetPlayersByNameSimpleAsync${query({ name: normalizedTerm, take, skip: 0 })}`,
+    signal,
   )
 
   return response
@@ -801,6 +893,10 @@ export async function getPlayerProfile(reference: string): Promise<PlayerProfile
     countryCode: header.CountryShort,
     homeClubName: header.HomeClubName,
     homeClubUrl: header.HomeClubUrl,
+    doublesStats: {
+      currentYear: parseWinLossRecord(response.Statistics?.WinLossDoublesCurrentYear),
+      career: parseWinLossRecord(response.Statistics?.CareerWinLossDoubles),
+    },
   }
 }
 
@@ -1378,6 +1474,28 @@ export async function getPlayerAnalysis(
   })
 
   return { playerId, playerName: 'Selected player', events: analyses }
+}
+
+function latestLeagueEvent(events: RawEvent[]) {
+  return events
+    .filter((event) => event.Type === 3)
+    .sort((first, second) => parseRankedinDate(second.StartDate) - parseRankedinDate(first.StartDate))[0]
+}
+
+export async function getPlayerCurrentLeagueDivision(playerId: number): Promise<PlayerLeagueDivision | null> {
+  const events = await getPlayerParticipatedEvents(playerId)
+  const event = latestLeagueEvent(events)
+  if (!event) return null
+
+  const details = await request<RawLeagueTeamDetail[]>(
+    `/teamleague/GetTeamLeagueTeamDetailsAsync${query({
+      teamLeagueId: event.Id,
+      participantId: playerId,
+      language: 'en',
+    })}`,
+  )
+  const divisionName = details.find((detail) => detail.divisionName?.trim())?.divisionName.trim()
+  return divisionName ? { divisionName } : null
 }
 
 export async function getPlayerLeagueAnalysis(

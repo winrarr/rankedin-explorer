@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { parsePlayerReference, parseTournamentReference } from './rankedin'
+import { tournament68954ClassLabels } from './fixtures/tournament-68954-class-labels'
+import { additionalTournamentClassLabels } from './fixtures/tournament-class-labels'
+import { normalizeCompetitionClassName, parsePlayerReference, parseTournamentReference, parseWinLossRecord } from './rankedin'
 
 describe('parseTournamentReference', () => {
   it('accepts a full Rankedin tournament URL', () => {
@@ -30,5 +32,31 @@ describe('parsePlayerReference', () => {
 
   it('rejects unrelated input', () => {
     expect(() => parsePlayerReference('not a player')).toThrow(/Rankedin player profile/)
+  })
+})
+
+describe('normalizeCompetitionClassName', () => {
+  it.each(tournament68954ClassLabels)('normalizes $raw', ({ raw, normalized, kind }) => {
+    expect(normalizeCompetitionClassName(raw)).toEqual({ name: normalized, kind })
+  })
+
+  it.each(additionalTournamentClassLabels)('normalizes tournament $tournamentId label $raw', ({ raw, normalized, kind }) => {
+    expect(normalizeCompetitionClassName(raw)).toEqual({ name: normalized, kind })
+  })
+
+  it('keeps an unrecognised source label separate instead of inventing a level', () => {
+    expect(normalizeCompetitionClassName('ABG Open')).toEqual({ name: 'ABG Open', kind: 'other' })
+  })
+})
+
+describe('parseWinLossRecord', () => {
+  it('normalizes Rankedin doubles statistics', () => {
+    expect(parseWinLossRecord('15-14')).toEqual({ wins: 15, losses: 14 })
+    expect(parseWinLossRecord('15–14')).toEqual({ wins: 15, losses: 14 })
+  })
+
+  it('returns null for missing or malformed statistics', () => {
+    expect(parseWinLossRecord(null)).toBeNull()
+    expect(parseWinLossRecord('unknown')).toBeNull()
   })
 })

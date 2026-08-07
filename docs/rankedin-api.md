@@ -9,9 +9,11 @@ The browser client uses the public base URL `https://api.rankedin.com/v1`. API a
 ## Read paths used by the app
 
 - `GET /Player/PlayerProfileInfoAsync?rankedinId=...&language=en` resolves a public `R...` profile ID to the numeric player ID used by event and result endpoints.
+- The same profile response exposes current-year and career doubles records; the pair history displays those normalized win-loss values without fetching every career match.
 - `GET /Search/GetPlayersByNameSimpleAsync?name=...&take=...&skip=...` returns compact public player search results with the numeric ID, display name and `R...` identifier.
 - `GET /Search/GetTournamentsAsync?term=...&language=en&take=...&skip=...` returns public tournament suggestions with the event URL, name, date and sport.
 - `GET /Player/ParticipatedEventsAsync?PlayerId=...&Language=en&Skip=...&Take=...` returns a player's participated events. The app currently keeps finished tournament events (`State === 4` and `Type === 4`).
+- The tournament field view can reuse that participated-event response to select each player's newest Lunar League event (`Type === 3`) and then resolve only its `divisionName` through the team-detail endpoint. Older seasons, standings and placement are intentionally excluded from this summary.
 - `GET /TeamLeague/GetHeaderAsync?id=...&language=en` and `GET /TeamLeague/GetTeamLeagueTeamDetailsAsync?teamLeagueId=...&participantId=...&language=en` resolve a player's Lunar League season and team without scanning every league pool.
 - `GET /TeamLeague/GetTeamLeagueTeamHomepageAsync?TeamId=...&Language=en` resolves the team's pool, while `GET /TeamLeague/GetTeamStandingsAsync?poolId=...&language=en` returns the current/final team standing and `GET /TeamLeague/GetTeamMatchesAsync?teamId=...&language=en` returns the season fixtures.
 - `GET /TeamLeague/GetMatchesForPoolAsync?poolId=...&language=en` returns every completed fixture in the pool, and `GET /TeamLeague/TeamLeagueTeamMatchStandingsAsync?teamMatchId=...&language=en` returns the aggregate contribution of both teams for one fixture. `GET /TeamLeague/GetStandingsRulesSettingsAsync?teamLeagueId=...&sport=...&language=en` returns the ordering rules used by the league table.
@@ -31,7 +33,7 @@ The implementation and endpoint-specific raw types live in [`src/lib/rankedin.ts
 - A participated event is not necessarily a usable placement. The event may be unfinished, cancelled, missing a matching result, or missing class data.
 - `GetResultsAsync.Data.length` is the current app's field-size measure. It represents result rows returned for the class and should continue to be treated as source data, not as an independently inferred field size.
 - `StandingRangeTo` can represent a tied or ranged placement. Numeric summaries should use the midpoint of `Standing` and `StandingRangeTo`; display should preserve the range.
-- Class names are organizer-entered and vary in spelling, case and suffixes such as `FTM`, draw labels and session names. Normalize only for grouping and retain the raw class name for source details.
+- Class names are organizer-entered and vary in spelling, case and suffixes such as `FTM`, draw labels and session names. The client normalizes reliable DPF, gender and junior signals for grouping, while keeping unrecognized labels in a separate group and retaining the raw class name for source details. Lunar League is a separate event type and remains outside tournament placement percentages.
 - API failures and incomplete records are normal states. Do not turn missing placement, field size or rating into zero.
 
 ## Request discipline

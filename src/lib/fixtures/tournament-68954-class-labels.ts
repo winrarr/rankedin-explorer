@@ -1,0 +1,17 @@
+export const tournament68954ClassLabels = [
+  { raw: 'Herrer DPF35 (først til mølle)', normalized: 'DPF35 Herrer', kind: 'dpf' },
+  { raw: 'Herrer DPF 35 Eftermiddag', normalized: 'DPF35 Herrer', kind: 'dpf' },
+  { raw: 'Herrer DPF 25#2 - FTM - Eftermiddag', normalized: 'DPF25 Herrer', kind: 'dpf' },
+  { raw: 'HERRER DPF 25 A (FØRST TIL MØLLE)', normalized: 'DPF25 Herrer', kind: 'dpf' },
+  { raw: 'Dpf 25 Herrer - Først til mølle (16 par)', normalized: 'DPF25 Herrer', kind: 'dpf' },
+  { raw: 'Herrer - DFP25 (FTM) - Lørdag', normalized: 'DPF25 Herrer', kind: 'dpf' },
+  { raw: 'Drenge U14 DPF500', normalized: 'DPF500 U14 Drenge', kind: 'dpf' },
+  { raw: 'Pojkar 14', normalized: 'U14 Drenge', kind: 'junior' },
+  { raw: 'U14 Drenge', normalized: 'U14 Drenge', kind: 'junior' },
+  { raw: 'Boys U16', normalized: 'U16 Drenge', kind: 'junior' },
+  { raw: 'DPF35B', normalized: 'DPF35', kind: 'dpf' },
+  { raw: 'Herrer DPF35B', normalized: 'DPF35 Herrer', kind: 'dpf' },
+  { raw: 'MIX DPF35', normalized: 'DPF35 Mix', kind: 'dpf' },
+  { raw: 'ABG Open', normalized: 'ABG Open', kind: 'other' },
+  { raw: 'Lunar Ligaen - Efterår 2026', normalized: 'Lunar League', kind: 'league' },
+] as const

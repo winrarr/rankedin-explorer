@@ -19,8 +19,9 @@ src/lib/rankedin.ts  ── normalized domain types ──>  React view state
 
 - `src/lib/rankedin.ts` owns URLs, raw API payloads, API errors and normalization. It should be the only place that knows Rankedin's PascalCase response shape.
 - `src/lib/preferences.ts` owns the deliberately narrow local persistence policy.
-- `src/App.tsx` owns the current vertical-slice interaction flow. When the product grows, split screens and hooks out of this file without moving API concerns into components.
+- `src/App.tsx` owns the cross-screen interaction flow and temporary request state. Focused view pieces live in `src/components/`, while pure display transformations live in `src/lib/formatters.ts` and `src/lib/fieldBreakdown.ts`.
 - `src/App.css` owns the visual system and responsive layout. Avoid one-off positional fixes; use the existing grid, flex and card primitives.
+- `src/styles/theme.css` is the single source for the light/dark palette and chart colors.
 
 ## Analysis flow
 
@@ -29,9 +30,10 @@ src/lib/rankedin.ts  ── normalized domain types ──>  React view state
 1. Parse a public tournament URL or ID.
 2. Load the tournament header and standings metadata.
 3. Load participants for the selected class.
-4. When a pair is selected, page through each player's participated events and keep finished events.
+4. When a pair is selected, page through each player's participated events and keep finished events; the pair card also reads the profile's current-year and career doubles records.
 5. For each event, locate the player's result by numeric participant ID across classes.
-6. Load matches for the matching class and normalize partners, opponents, scores and outcomes.
+6. For the field summary, select each player's newest `Type === 3` Lunar League event and resolve only its division name; older seasons and placement are excluded.
+7. Load matches for the matching class and normalize partners, opponents, scores and outcomes.
 
 ### Player Progress
 
