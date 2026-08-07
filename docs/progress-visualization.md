@@ -54,7 +54,7 @@ The Lunar League chart combines both ideas in one data-driven view. Each divisio
 
 The visible division window contains only divisions the player has actually played in. The horizontal axis shows the player's seasons in chronological sequence; each slot spans the player's first-to-last fixture, fixture dates remain ordered and proportionally spaced within that slot, and a small visual gap separates the slots. Season labels and the evidence cards retain the real official date ranges.
 
-For the current seven-team Lunar League pools, reconstruction uses the pool fixture list and one aggregate standings response for each completed team fixture. The resulting final aggregate is validated against Rankedin's final standings endpoint. The implementation deliberately keeps this league-specific concurrency at six because a 25-request burst caused throttling during API exploration, while transient 429 responses are retried by the shared request queue.
+For the current seven-team Lunar League pools, reconstruction uses the pool fixture list and one aggregate standings response for each completed team fixture. The resulting final aggregate is validated against Rankedin's final standings endpoint. The implementation deliberately keeps this league-specific concurrency at four because a wider burst caused throttling during API exploration, while the shared queue pauses after `429` responses and retries with backoff.
 
 This separation keeps two different kinds of evidence honest: tournament charts answer “how did the player finish relative to that field?”, while the league chart answers “which division did the player compete in, and how did their team and individual record look that season?”.
 

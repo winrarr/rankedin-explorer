@@ -463,14 +463,31 @@ type QueuedRequest = {
 }
 
 const requestQueue: QueuedRequest[] = []
-const MAX_ACTIVE_REQUESTS = 25
-const MAX_EVENT_ANALYSIS_CONCURRENCY = MAX_ACTIVE_REQUESTS
-const MAX_LEAGUE_STANDING_CONCURRENCY = 6
+const MAX_ACTIVE_REQUESTS = 10
+const MAX_EVENT_ANALYSIS_CONCURRENCY = 4
+const MAX_CLASS_PROBE_CONCURRENCY = 2
+const MAX_LEAGUE_STANDING_CONCURRENCY = 4
 const MAX_RETRY_ATTEMPTS = 4
 const PARTICIPATED_EVENTS_TAKE = 50
 let activeRequestCount = 0
+let requestNotBefore = 0
+let requestDrainTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleRequestDrain() {
+  if (requestDrainTimer !== null) return
+  const delay = Math.max(0, requestNotBefore - Date.now())
+  requestDrainTimer = setTimeout(() => {
+    requestDrainTimer = null
+    drainRequestQueue()
+  }, delay)
+}
 
 function drainRequestQueue() {
+  if (Date.now() < requestNotBefore) {
+    scheduleRequestDrain()
+    return
+  }
+
   while (activeRequestCount < MAX_ACTIVE_REQUESTS && requestQueue.length) {
     const nextRequest = requestQueue.shift()
     if (!nextRequest) return
@@ -517,6 +534,11 @@ function retryDelay(response: Response, attempt: number) {
   return Math.min(12000, 500 * (2 ** attempt) + Math.round(Math.random() * 250))
 }
 
+function pauseRequestQueue(delay: number) {
+  requestNotBefore = Math.max(requestNotBefore, Date.now() + delay)
+  scheduleRequestDrain()
+}
+
 function isRetryableStatus(status: number) {
   return status === 408 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504
 }
@@ -539,7 +561,9 @@ async function fetchJson(path: string, signal?: AbortSignal) {
       if (!isRetryableStatus(response.status) || attempt === MAX_RETRY_ATTEMPTS - 1) {
         throw new Error(`Rankedin returned ${response.status} for ${path}`)
       }
-      await waitForRetry(retryDelay(response, attempt), signal)
+      const delay = retryDelay(response, attempt)
+      if (response.status === 429) pauseRequestQueue(delay)
+      await waitForRetry(delay, signal)
     } catch (error) {
       if (error instanceof Error && error.message.startsWith('Rankedin returned')) throw error
       if (!isRetryableError(error, signal) || attempt === MAX_RETRY_ATTEMPTS - 1) throw error
@@ -704,7 +728,7 @@ async function findPlayerClassResult(
   }
 
   await Promise.all(
-    Array.from({ length: Math.min(4, classes.length) }, () => worker()),
+    Array.from({ length: Math.min(MAX_CLASS_PROBE_CONCURRENCY, classes.length) }, () => worker()),
   )
   return match
 }
@@ -1455,6 +1479,9 @@ function cachedEventAnalysis(event: RawEvent, playerId: number) {
 
   const pending = analyzeEvent(event, playerId)
   eventAnalysisCache.set(cacheKey, pending)
+  pending.catch(() => {
+    if (eventAnalysisCache.get(cacheKey) === pending) eventAnalysisCache.delete(cacheKey)
+  })
   return pending
 }
 

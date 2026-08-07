@@ -85,6 +85,8 @@ import {
 import './App.css'
 
 const PLAYER_PROGRESS_HISTORY_LIMIT = 25
+const FIELD_PLACEMENT_CONCURRENCY = 3
+const FIELD_LEAGUE_CONCURRENCY = 6
 
 type WorkspaceMode = 'tournament' | 'player'
 
@@ -159,6 +161,30 @@ function pairRating(pair: PairRecord) {
 
 function fieldPlacementEvents(analysis: PlayerAnalysis | null) {
   return analysis?.events.filter((event) => event.className).slice(0, 5) ?? []
+}
+
+async function settleWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  mapper: (item: T) => Promise<R>,
+) {
+  const results: PromiseSettledResult<R>[] = []
+  let nextIndex = 0
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex
+      nextIndex += 1
+      try {
+        results[currentIndex] = { status: 'fulfilled', value: await mapper(items[currentIndex]) }
+      } catch (reason) {
+        results[currentIndex] = { status: 'rejected', reason }
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()))
+  return results
 }
 
 function placementProgress(event: PlayerEventAnalysis) {
@@ -1378,8 +1404,10 @@ function App() {
     setFieldPlacementSummaries({})
     setFieldPlacementsLoaded(false)
 
-    const results = await Promise.allSettled(
-      players.map(async (player) => {
+    const results = await settleWithConcurrency(
+      players,
+      FIELD_PLACEMENT_CONCURRENCY,
+      async (player) => {
         const analysis = await getPlayerAnalysis(player.id, 5, (event) => {
           if (requestId !== fieldPlacementRequestRef.current) return
           setFieldPlacementSummaries((current) => {
@@ -1404,7 +1432,7 @@ function App() {
           }))
         }
         return { player, analysis }
-      }),
+      },
     )
     let failedCount = 0
 
@@ -1435,7 +1463,11 @@ function App() {
     setFieldLeagueDivisions({})
     setFieldLeagueDivisionsLoaded(false)
 
-    const results = await Promise.allSettled(players.map((player) => getPlayerCurrentLeagueDivision(player.id)))
+    const results = await settleWithConcurrency(
+      players,
+      FIELD_LEAGUE_CONCURRENCY,
+      (player) => getPlayerCurrentLeagueDivision(player.id),
+    )
     const divisions: Record<number, PlayerLeagueDivision | null> = {}
     let failedCount = 0
 
