@@ -463,7 +463,7 @@ type QueuedRequest = {
 }
 
 const requestQueue: QueuedRequest[] = []
-const MAX_ACTIVE_REQUESTS = 10
+const MAX_ACTIVE_REQUESTS = 25
 const MAX_EVENT_ANALYSIS_CONCURRENCY = 4
 const MAX_CLASS_PROBE_CONCURRENCY = 2
 const MAX_LEAGUE_STANDING_CONCURRENCY = 4
