@@ -13,6 +13,16 @@ export type FieldLeagueDivisionCount = {
   playerCount: number
 }
 
+export function mostCommonRecentClass(summaries: FieldClassSummary[]) {
+  return summaries
+    .filter((summary) => summary.kind !== 'other' && summary.kind !== 'league')
+    .slice()
+    .sort((first, second) => second.playerCount - first.playerCount
+      || second.resultCount - first.resultCount
+      || first.averageTopPercent - second.averageTopPercent
+      || first.className.localeCompare(second.className))[0] ?? null
+}
+
 export const leagueDivisionScale = [
   'Elitedivision',
   '1. Division',

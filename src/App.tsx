@@ -55,9 +55,11 @@ import {
   FieldClassSummaryGrid,
   FieldLeagueDivisionSummary,
 } from './components/FieldBreakdown'
+import { InfoTip } from './components/InfoTip'
 import {
   leagueDivisionIndex,
   leagueDivisionScale,
+  mostCommonRecentClass,
   summarizeFieldLeagueDivisions,
   type FieldClassSummary,
 } from './lib/fieldBreakdown'
@@ -389,8 +391,6 @@ function ProgressChart({ series }: ProgressChartProps) {
           </button>
         ))}
       </div>
-      {series.some((item) => item.points.length > 1) && <div className="progress-chart-key"><span /> Dotted line = linear direction, not a forecast</div>}
-
       {!points.length ? (
         <div className="progress-chart-empty">Select a class above to show its results.</div>
       ) : (
@@ -690,9 +690,8 @@ function LeagueProgressSection({ seasons, isLoading, error }: LeagueProgressSect
       <div className="card-heading">
         <div>
           <div className="section-kicker">LUNAR LEAGUE PROGRESS</div>
-          <h2>Follow the division path.</h2>
+          <h2>Division history <InfoTip label="About Lunar League progress" message="Divisions are categorical, not numeric. The chart follows the player's division and team standing across each season." /></h2>
         </div>
-        <span className="progress-card-direction">higher is stronger</span>
       </div>
       {isLoading && !seasons.length && <div className="league-loading"><LoaderCircle className="spin" size={15} /> Reading finished league seasons…</div>}
       {error && <p className="league-error"><CircleHelp size={14} /> {error}</p>}
@@ -738,7 +737,6 @@ function LeagueProgressSection({ seasons, isLoading, error }: LeagueProgressSect
               )
             })}
           </div>
-          <p className="league-chart-note"><Info size={14} /> Division is categorical, not a numeric rating. Each season has its own fixture slot, while each checkpoint is calculated after the team’s own fixture using all completed pool fixtures up to that point.</p>
         </>
       )}
     </section>
@@ -798,9 +796,9 @@ function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueErro
       {analysis && (
         <>
           <section className="metric-grid progress-metric-grid" aria-label="Player progress summary">
-            <MetricCard dark icon={<Trophy size={15} />} label="RESULTS CHARTED" value={points.length} detail="finished tournament placements" />
-            <MetricCard icon={<Users size={15} />} label="LEVELS IN HISTORY" value={series.length} detail="level / class series" />
-            <MetricCard icon={<Gauge size={15} />} label="AVERAGE FINISH" value={formatPercent(average)} detail="lower is better" />
+            <MetricCard dark icon={<Trophy size={15} />} label="RESULTS CHARTED" value={points.length} detail="finished placements" />
+            <MetricCard icon={<Users size={15} />} label="LEVELS IN HISTORY" value={series.length} detail="normalized classes" />
+            <MetricCard icon={<Gauge size={15} />} label="AVERAGE FINISH" value={formatPercent(average)} detail="all comparable results" />
             <MetricCard icon={<CalendarDays size={15} />} label="LATEST RESULT" value={latestPoint ? formatPercent(latestPoint.percentage) : '—'} detail={latestPoint ? formatCompactDate(latestPoint.event.startDate) : 'no comparable result'} />
           </section>
 
@@ -808,13 +806,11 @@ function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueErro
             <div className="card-heading">
               <div>
                 <div className="section-kicker">PLACEMENT TIMELINE</div>
-                <h2>See the level behind the result.</h2>
-                <p>{formatProgressDateRange(points)} <span className="muted-divider">/</span> each point is one finished tournament</p>
+                <h2>Placement timeline</h2>
+                <p>{formatProgressDateRange(points)} <span className="muted-divider">/</span> each point is one finished tournament <span className="inline-guidance">· lower is better <InfoTip label="About placement percentages" message="Placement percentage is standing divided by the finished field size. Solid lines connect results within the same normalized class; dotted lines show direction only and are not forecasts." /></span></p>
               </div>
-              <span className="progress-card-direction">lower is better</span>
             </div>
             <ProgressChart series={series} />
-            <p className="progress-chart-note"><Info size={14} /> Placement percentage is standing divided by the finished field size. Solid lines connect results within the same normalized class; dotted lines show their linear direction and are not forecasts.</p>
           </section>
 
           <LeagueProgressSection
@@ -843,7 +839,7 @@ function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueErro
             <div className="card-heading">
               <div>
                 <div className="section-kicker">RECENT RESULTS</div>
-                <h2>Check the points behind the pattern.</h2>
+                <h2>Recent results</h2>
                 <p>{points.length} comparable placements <span className="muted-divider">/</span> {formatProgressDateRange(points)}</p>
               </div>
             </div>
@@ -863,7 +859,11 @@ function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueErro
                 </tbody>
               </table>
             </div>
-            {unavailableCount > 0 && <p className="progress-chart-note"><Info size={14} /> {unavailableCount} event {unavailableCount === 1 ? 'record is' : 'records are'} not shown because Rankedin did not provide a comparable finished placement.</p>}
+            {unavailableCount > 0 && (
+              <p className="progress-chart-note">
+                <span>{unavailableCount} event {unavailableCount === 1 ? 'record is' : 'records are'} unavailable <InfoTip label="About unavailable results" message="These events are omitted because Rankedin did not provide a comparable finished placement." /></span>
+              </p>
+            )}
           </section>
         </>
       )}
@@ -1108,9 +1108,17 @@ function App() {
   )
   const normalizedFieldClassSummaries = fieldClassSummaries.filter((summary) => summary.kind !== 'other')
   const otherFieldClassSummaries = fieldClassSummaries.filter((summary) => summary.kind === 'other')
+  const commonRecentClass = useMemo(
+    () => mostCommonRecentClass(fieldClassSummaries),
+    [fieldClassSummaries],
+  )
   const fieldLeagueSummary = useMemo(
     () => summarizeFieldLeagueDivisions(fieldLeagueDivisions),
     [fieldLeagueDivisions],
+  )
+  const currentLeagueDivisionPlayers = fieldLeagueSummary.divisions.reduce(
+    (total, division) => total + division.playerCount,
+    0,
   )
   const isLoadingFieldData = isLoadingFieldPlacements || isLoadingFieldLeagueDivisions
 
@@ -1698,6 +1706,22 @@ function App() {
         <section className="metric-grid" aria-label="Field summary">
           <MetricCard dark icon={<Users size={15} />} label="REGISTERED IN CLASS" value={snapshot.participants.length * 2} detail={`players / ${snapshot.participants.length} pairs`} />
           <MetricCard icon={<Gauge size={15} />} label="AVERAGE SKILL" value={formatRating(averageRating)} detail="historical rating at entry" />
+          <MetricCard
+            icon={<GitBranch size={15} />}
+            label="CURRENT LUNAR LEAGUE"
+            value={fieldLeagueDivisionsLoaded
+              ? `${currentLeagueDivisionPlayers} / ${snapshot.participants.length * 2}`
+              : isLoadingFieldLeagueDivisions ? 'Reading…' : '—'}
+            detail="players with a current division"
+          />
+          <MetricCard
+            icon={<History size={15} />}
+            label="MOST COMMON RECENT CLASS"
+            value={commonRecentClass?.className ?? (isLoadingFieldPlacements ? 'Reading…' : '—')}
+            detail={commonRecentClass
+              ? `Top ${Math.round(commonRecentClass.averageTopPercent * 100)}% average · ${commonRecentClass.playerCount} players`
+              : 'latest five form results'}
+          />
         </section>
 
         <section className="dashboard-grid">
@@ -1733,9 +1757,8 @@ function App() {
                 <div className="field-aggregate-heading">
                   <div>
                     <div className="section-kicker">RECENT FORM BY CLASS</div>
-                    <p>Average of the latest five finished tournaments for each player.</p>
+                    <p>Average of the latest five finished tournaments for each player <span className="inline-guidance">· lower is better <InfoTip label="About placement percentages" message="Each result is shown as placement divided by the finished field size, so lower percentages mean stronger finishes." /></span></p>
                   </div>
-                  <span>lower is better</span>
                 </div>
                 {fieldClassSummaries.length ? (
                   <>
@@ -1746,7 +1769,6 @@ function App() {
                       <div className="field-aggregate-other">
                         <div className="field-aggregate-other-heading">
                           <div className="section-kicker">OTHER / UNCLASSIFIED CLASSES</div>
-                          <span>Source label kept as provided</span>
                         </div>
                         <FieldClassSummaryGrid summaries={otherFieldClassSummaries} />
                       </div>
@@ -1755,7 +1777,6 @@ function App() {
                 ) : (
                   <p className="field-aggregate-empty">No comparable finished placements were found yet.</p>
                 )}
-                <p className="field-aggregate-note"><Info size={13} /> Top percentage is placement divided by the finished field size; a lower percentage means a stronger average finish.</p>
               </section>
             )}
 
@@ -1764,9 +1785,7 @@ function App() {
                 <div className="field-aggregate-heading">
                   <div>
                     <div className="section-kicker">CURRENT LUNAR LEAGUE</div>
-                    <p>Players grouped by the division in their newest Lunar League season.</p>
                   </div>
-                  <span>division only</span>
                 </div>
                 <FieldLeagueDivisionSummary
                   divisions={fieldLeagueSummary.divisions}
@@ -1783,7 +1802,7 @@ function App() {
 
             <div className="table-scroll">
               <table className="roster-table">
-                <thead><tr><th>PAIR</th><th>LAST 5 / PLAYER</th><th>SKILL</th></tr></thead>
+                <thead><tr><th>PAIR</th><th>LAST 5 / PLAYER</th><th><span className="table-header-with-info">SKILL <InfoTip label="About skill" message="Historical rating shown at tournament start, not a live rating." /></span></th></tr></thead>
                 <tbody>
                   {visibleParticipants.map((pair, index) => {
                     const rating = pairRating(pair)
@@ -1852,7 +1871,6 @@ function App() {
                 </tbody>
               </table>
             </div>
-            <div className="table-footnote"><Info size={14} /> Skill is the historical value shown at tournament start, not a live rating.</div>
           </div>
 
         </section>
