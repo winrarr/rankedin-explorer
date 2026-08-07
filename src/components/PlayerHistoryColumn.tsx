@@ -163,12 +163,12 @@ export function PlayerHistoryColumn({
           <section className="player-record-summary" aria-label={'Doubles records for ' + player.name}>
             <div>
               <span>{new Date().getFullYear()} DOUBLES</span>
-              <strong>{isLoadingDoublesStats ? '…' : formatWinLossRecord(doublesStats?.currentYear)}</strong>
+              <strong>{isLoadingDoublesStats ? <LoaderCircle className="spin record-loading" size={15} aria-label="Reading current-year record" /> : formatWinLossRecord(doublesStats?.currentYear)}</strong>
               <small>current year</small>
             </div>
             <div>
               <span>CAREER DOUBLES</span>
-              <strong>{isLoadingDoublesStats ? '…' : formatWinLossRecord(doublesStats?.career)}</strong>
+              <strong>{isLoadingDoublesStats ? <LoaderCircle className="spin record-loading" size={15} aria-label="Reading career record" /> : formatWinLossRecord(doublesStats?.career)}</strong>
               <small>total wins–losses</small>
             </div>
           </section>

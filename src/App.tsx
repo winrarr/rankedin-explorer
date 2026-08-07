@@ -51,6 +51,7 @@ import {
   type Preferences,
 } from './lib/preferences'
 import { MetricCard } from './components/MetricCard'
+import { LoadingValue } from './components/LoadingValue'
 import {
   FieldClassSummaryGrid,
   FieldLeagueDivisionSummary,
@@ -1711,13 +1712,13 @@ function App() {
             label="CURRENT LUNAR LEAGUE"
             value={fieldLeagueDivisionsLoaded
               ? `${currentLeagueDivisionPlayers} / ${snapshot.participants.length * 2}`
-              : isLoadingFieldLeagueDivisions ? 'Reading…' : '—'}
+              : isLoadingFieldLeagueDivisions ? <LoadingValue /> : '—'}
             detail="players with a current division"
           />
           <MetricCard
             icon={<History size={15} />}
             label="MOST COMMON RECENT CLASS"
-            value={commonRecentClass?.className ?? (isLoadingFieldPlacements ? 'Reading…' : '—')}
+            value={commonRecentClass?.className ?? (isLoadingFieldPlacements ? <LoadingValue /> : '—')}
             detail={commonRecentClass
               ? `Top ${Math.round(commonRecentClass.averageTopPercent * 100)}% average · ${commonRecentClass.playerCount} players`
               : 'latest five form results'}
@@ -1837,7 +1838,7 @@ function App() {
                                 <div className="field-placement-player" key={player.id}>
                                   <span className="field-placement-player-name">{player.name}</span>
                                   <span className="field-placement-tags">
-                                    {!hasSummary && isLoadingFieldPlacements && <span className="field-placement-muted">Reading…</span>}
+                                    {!hasSummary && isLoadingFieldPlacements && <span className="field-placement-muted loading-inline"><LoaderCircle className="spin" size={11} aria-hidden="true" /> Reading…</span>}
                                     {!hasSummary && !isLoadingFieldPlacements && !fieldPlacementsLoaded && <span className="field-placement-muted">Not loaded</span>}
                                     {hasSummary && summary === null && <span className="field-placement-muted">Unavailable</span>}
                                     {hasSummary && summary && !events.length && <span className="field-placement-muted">No finished events</span>}
