@@ -15,7 +15,7 @@ export type FieldLeagueDivisionCount = {
 
 export function mostCommonRecentClass(summaries: FieldClassSummary[]) {
   return summaries
-    .filter((summary) => summary.kind !== 'other' && summary.kind !== 'league')
+    .filter((summary) => summary.kind === 'dpf')
     .slice()
     .sort((first, second) => second.playerCount - first.playerCount
       || second.resultCount - first.resultCount

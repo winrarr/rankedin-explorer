@@ -8,7 +8,7 @@ type InfoTipProps = {
 export function InfoTip({ label, message }: InfoTipProps) {
   return (
     <span className="info-tip-wrap">
-      <button className="info-tip" type="button" aria-label={label} title={message}>
+      <button className="info-tip" type="button" aria-label={label}>
         <Info size={13} aria-hidden="true" />
       </button>
       <span className="info-tip-message" role="tooltip">{message}</span>

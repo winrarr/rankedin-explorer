@@ -1106,8 +1106,8 @@ function App() {
     () => summarizeFieldPlacements(fieldPlacementSummaries),
     [fieldPlacementSummaries],
   )
-  const normalizedFieldClassSummaries = fieldClassSummaries.filter((summary) => summary.kind !== 'other')
-  const otherFieldClassSummaries = fieldClassSummaries.filter((summary) => summary.kind === 'other')
+  const normalizedFieldClassSummaries = fieldClassSummaries.filter((summary) => summary.kind === 'dpf')
+  const otherFieldClassSummaries = fieldClassSummaries.filter((summary) => summary.kind !== 'dpf')
   const commonRecentClass = useMemo(
     () => mostCommonRecentClass(fieldClassSummaries),
     [fieldClassSummaries],
@@ -1800,7 +1800,7 @@ function App() {
               <span className="table-count">{visibleParticipants.length} of {snapshot.participants.length} pairs</span>
             </div>
 
-            <div className="table-scroll">
+            <div className="table-scroll roster-table-scroll">
               <table className="roster-table">
                 <thead><tr><th>PAIR</th><th>LAST 5 / PLAYER</th><th><span className="table-header-with-info">SKILL <InfoTip label="About skill" message="Historical rating shown at tournament start, not a live rating." /></span></th></tr></thead>
                 <tbody>
