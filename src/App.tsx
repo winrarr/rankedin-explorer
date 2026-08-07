@@ -55,7 +55,12 @@ import {
   FieldClassSummaryGrid,
   FieldLeagueDivisionSummary,
 } from './components/FieldBreakdown'
-import { summarizeFieldLeagueDivisions, type FieldClassSummary } from './lib/fieldBreakdown'
+import {
+  leagueDivisionIndex,
+  leagueDivisionScale,
+  summarizeFieldLeagueDivisions,
+  type FieldClassSummary,
+} from './lib/fieldBreakdown'
 import {
   compactClassName,
   dateTimestamp,
@@ -439,33 +444,6 @@ function ProgressChart({ series }: ProgressChartProps) {
       )}
     </div>
   )
-}
-
-const leagueDivisionScale = [
-  'Elitedivision',
-  '1. Division',
-  '2. Division',
-  'Danmarksserie',
-  'Serie 1',
-  'Serie 2',
-  'Serie 3',
-  'Serie 4',
-  'Serie 5',
-]
-
-function leagueDivisionLabel(value: string) {
-  return value.replace(/\s*-\s*[A-Z]\s*$/i, '').trim() || value
-}
-
-function leagueDivisionIndex(value: string) {
-  const label = leagueDivisionLabel(value).toLowerCase()
-  if (label.includes('elite')) return 0
-  if (/^1\.\s*division/.test(label)) return 1
-  if (/^2\.\s*division/.test(label)) return 2
-  if (label.includes('danmarksserie')) return 3
-  const serie = label.match(/^serie\s+(\d+)/)
-  if (serie) return Math.min(8, 3 + Number(serie[1]))
-  return leagueDivisionScale.length - 1
 }
 
 function leagueSeasonMatches(season: LeagueSeasonAnalysis) {
@@ -1122,7 +1100,6 @@ function App() {
   const averageRating = ratings.length
     ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
     : null
-  const ratingSpread = ratings.length > 1 ? Math.max(...ratings) - Math.min(...ratings) : null
   const selectedPair = snapshot?.participants.find((pair) => pair.id === selectedPairId)
   const classTitle = snapshot?.selectedClass.name.replace(/\s*\([^)]*\)/, '') ?? ''
   const fieldClassSummaries = useMemo(
@@ -1720,9 +1697,7 @@ function App() {
 
         <section className="metric-grid" aria-label="Field summary">
           <MetricCard dark icon={<Users size={15} />} label="REGISTERED IN CLASS" value={snapshot.participants.length * 2} detail={`players / ${snapshot.participants.length} pairs`} />
-          <MetricCard icon={<Trophy size={15} />} label="CLASSES IN EVENT" value={snapshot.classes.length} detail="competition levels visible" />
           <MetricCard icon={<Gauge size={15} />} label="AVERAGE SKILL" value={formatRating(averageRating)} detail="historical rating at entry" />
-          <MetricCard icon={<Activity size={15} />} label="FIELD SPREAD" value={ratingSpread === null ? '—' : ratingSpread.toFixed(2)} detail="highest vs lowest average" />
         </section>
 
         <section className="dashboard-grid">

@@ -144,7 +144,7 @@ h1 em { color: var(--coral); font-style: normal; }
 .workspace-actions { display: flex; align-items: center; gap: 18px; }.text-button { padding: 0; border: 0; color: var(--blue); background: transparent; }.text-button:hover { color: var(--ink); }
 .outline-button { padding: 9px 13px; border: 1px solid var(--line); background: var(--card); }.outline-button:hover { border-color: var(--blue); color: var(--blue); }
 
-.metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px; }
 .metric-card { min-height: 118px; padding: 17px 18px; background: var(--card); border: 1px solid var(--line); border-radius: 13px; }.metric-card-dark { color: #eff4f1; background: #36545d; border-color: #36545d; }.metric-card-dark .metric-label, .metric-card-dark span { color: #b9d0d0; }
 .metric-label { display: flex; align-items: center; gap: 7px; color: var(--muted); }.metric-card strong { display: block; margin: 13px 0 3px; font-family: inherit; font-size: 33px; line-height: 1; font-weight: 800; letter-spacing: -.06em; }.metric-card span { color: var(--muted); font-size: 10px; }
 
