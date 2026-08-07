@@ -6,6 +6,7 @@ Rankedin Explorer is a read-only React/Vite site for making public Rankedin tour
 
 - `src/App.tsx` — application composition and user-facing interaction state.
 - `src/lib/rankedin.ts` — Rankedin API client, response normalization and analysis workflow.
+- `src/lib/exports.ts` — browser-only tournament report model and CSV/JSON downloads.
 - `src/lib/preferences.ts` — versioned, lightweight local preference storage.
 - `src/lib/*.test.ts` — focused pure-function tests.
 - `docs/` — product scope, architecture, API contract notes, constraints and decisions.
@@ -35,6 +36,8 @@ Run these from the repository root:
 Before handing off implementation work, run `npm run check`.
 
 Unless the user explicitly asks for local-only changes, always deploy completed implementation changes before handoff. Run `npm run check`, commit only the scoped changes, push to the configured deployment branch, and verify the GitHub Pages workflow succeeds.
+
+The GitHub Pages workflow in `.github/workflows/deploy.yml` deploys pushes to `main`; a feature branch must be pushed to its remote and then updated into `main` before deployment verification.
 
 ## Durable project knowledge
 

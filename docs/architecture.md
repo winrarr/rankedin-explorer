@@ -12,12 +12,14 @@ src/lib/rankedin.ts  ── normalized domain types ──>  React view state
                                                         │
                                                         ├─ temporary tournament exploration
                                                         ├─ temporary player progress analysis
+                                                        ├─ browser-only report exports
                                                         └─ small local display preferences
 ```
 
 ## Boundaries
 
 - `src/lib/rankedin.ts` owns URLs, raw API payloads, API errors and normalization. It should be the only place that knows Rankedin's PascalCase response shape.
+- `src/lib/exports.ts` turns the normalized tournament view state into browser downloads. It must not fetch API data or become a second persistence layer.
 - `src/lib/preferences.ts` owns the deliberately narrow local persistence policy.
 - `src/App.tsx` owns the cross-screen interaction flow and temporary request state. Focused view pieces live in `src/components/`, while pure display transformations live in `src/lib/formatters.ts` and `src/lib/fieldBreakdown.ts`.
 - `src/App.css` owns the visual system and responsive layout. Avoid one-off positional fixes; use the existing grid, flex and card primitives.
@@ -47,5 +49,13 @@ src/lib/rankedin.ts  ── normalized domain types ──>  React view state
 8. Derive tournament placement percentage from standing and field size, using the midpoint for ranged standings.
 
 Both modes render incomplete records honestly rather than treating missing data as zero.
+
+### Search and loading reliability
+
+Name searches are debounced before requesting the public API. Each search has an abortable request, an eight-second timeout and a request generation check, so stale responses cannot overwrite newer input or leave the interface stuck in a searching state. Direct public IDs bypass name search. Long analyses expose partial results and use explicit loading/error states; a later request generation supersedes earlier work without allowing its callbacks to update the current view.
+
+### Report export
+
+Tournament exports are derived from the already-loaded normalized React state and make no additional Rankedin requests. Print/save PDF uses the browser's print flow and print media styles to omit app chrome. CSV contains one row per player with pair, ranking, skill, current Lunar League division and up to five recent results. JSON contains the normalized report, source links, raw class labels, current League divisions and explicit partial/complete data status. The app does not persist any of these reports; sharing a durable copy is done through a URL or a downloaded file.
 
 The API currently permits cross-origin browser requests from a GitHub Pages-style origin. This is an external deployment fact, not an application guarantee; if Rankedin changes its CORS policy, the project will need an explicitly approved proxy or server-backed architecture.
