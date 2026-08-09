@@ -88,6 +88,14 @@ import {
   downloadTournamentCsv,
   downloadTournamentJson,
 } from './lib/exports'
+import {
+  buildTournamentSnapshotUrl,
+  decodeTournamentSnapshot,
+  readSnapshotPayload,
+  restoreTournamentSnapshot,
+  shortenSnapshotUrl,
+  snapshotShorteningError,
+} from './lib/snapshots'
 import './App.css'
 
 const PLAYER_PROGRESS_HISTORY_LIMIT = 25
@@ -95,6 +103,7 @@ const FIELD_PLACEMENT_CONCURRENCY = 3
 const FIELD_LEAGUE_CONCURRENCY = 6
 
 type WorkspaceMode = 'tournament' | 'player' | 'league'
+type SnapshotShareState = 'idle' | 'creating' | 'copied' | 'fallback'
 
 type SharedLocation = {
   mode: WorkspaceMode
@@ -103,19 +112,21 @@ type SharedLocation = {
   playerReference: string
   leagueReference: string
   poolId: number | undefined
+  snapshotPayload: string | null
 }
 
 function readSharedLocation(): SharedLocation {
   if (typeof window === 'undefined') {
-    return { mode: 'tournament', tournamentReference: '', classId: undefined, playerReference: '', leagueReference: '', poolId: undefined }
+    return { mode: 'tournament', tournamentReference: '', classId: undefined, playerReference: '', leagueReference: '', poolId: undefined, snapshotPayload: null }
   }
 
   const params = new URLSearchParams(window.location.search)
+  const snapshotPayload = readSnapshotPayload()
   const tournamentReference = params.get('tournament')?.trim() ?? ''
   const playerReference = params.get('player')?.trim() ?? ''
   const leagueReference = params.get('league')?.trim() ?? ''
   const modeParam = params.get('mode')
-  const mode: WorkspaceMode = modeParam === 'league' || (!tournamentReference && !playerReference && leagueReference)
+  const mode: WorkspaceMode = snapshotPayload ? 'tournament' : modeParam === 'league' || (!tournamentReference && !playerReference && leagueReference)
     ? 'league'
     : modeParam === 'player' || (!tournamentReference && playerReference)
       ? 'player'
@@ -130,6 +141,7 @@ function readSharedLocation(): SharedLocation {
     playerReference,
     leagueReference,
     poolId: Number.isInteger(poolValue) && poolValue > 0 ? poolValue : undefined,
+    snapshotPayload,
   }
 }
 
@@ -160,7 +172,7 @@ function updateSharedLocation({ mode, tournament, classId, player, league, poolI
   }
 
   const query = params.toString()
-  window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`)
+  window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`)
 }
 
 function isDirectTournamentReference(value: string) {
@@ -1064,6 +1076,7 @@ function App() {
   const [playerError, setPlayerError] = useState<string | null>(null)
   const [playerLeagueError, setPlayerLeagueError] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<TournamentSnapshot | null>(null)
+  const [isViewingSnapshot, setIsViewingSnapshot] = useState(false)
   const [leagueSnapshot, setLeagueSnapshot] = useState<LeagueSnapshot | null>(null)
   const [isAnalyzingLeague, setIsAnalyzingLeague] = useState(false)
   const [isLoadingLeaguePool, setIsLoadingLeaguePool] = useState(false)
@@ -1089,6 +1102,7 @@ function App() {
   const [showTournamentSearch, setShowTournamentSearch] = useState(false)
   const [showLeagueSearch, setShowLeagueSearch] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
+  const [snapshotShareState, setSnapshotShareState] = useState<SnapshotShareState>('idle')
   const fieldPlacementRequestRef = useRef(0)
   const fieldLeagueRequestRef = useRef(0)
   const tournamentRequestRef = useRef(0)
@@ -1126,6 +1140,10 @@ function App() {
   }, [preferences])
 
   useEffect(() => {
+    if (initialLocation.snapshotPayload) {
+      void restoreSharedSnapshot(initialLocation.snapshotPayload)
+      return
+    }
     if (initialLocation.mode === 'tournament' && initialLocation.tournamentReference) {
       void analyzeTournament(initialLocation.tournamentReference, initialLocation.classId)
     }
@@ -1200,10 +1218,10 @@ function App() {
   }, [activeMode, leagueReference])
 
   useEffect(() => {
-    if (activeMode !== 'tournament' || !snapshot) return
+    if (activeMode !== 'tournament' || !snapshot || isViewingSnapshot) return
     void loadFieldPlacements(snapshot.participants)
     void loadFieldLeagueDivisions(snapshot.participants)
-  }, [activeMode, snapshot])
+  }, [activeMode, isViewingSnapshot, snapshot])
 
   const visibleParticipants = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -1242,6 +1260,7 @@ function App() {
   )
   const isLoadingFieldData = isLoadingFieldPlacements || isLoadingFieldLeagueDivisions
   const canExportTournament = Boolean(snapshot && !isAnalyzing)
+  const canShareSnapshot = canExportTournament
 
   function tournamentExportInput() {
     if (!snapshot) return null
@@ -1257,6 +1276,35 @@ function App() {
     }
   }
 
+  async function restoreSharedSnapshot(payload: string) {
+    try {
+      const report = await decodeTournamentSnapshot(payload)
+      const restored = restoreTournamentSnapshot(report)
+      const tournamentReference = String(restored.snapshot.tournamentId)
+      lastAnalyzedTournamentReferenceRef.current = tournamentReference
+      setActiveMode('tournament')
+      setTournamentUrl(tournamentReference)
+      setSnapshot(restored.snapshot)
+      setIsViewingSnapshot(true)
+      setIsAnalyzing(false)
+      setSelectedPairId(null)
+      setPairHistory(null)
+      setFieldPlacementSummaries(restored.fieldPlacementSummaries)
+      setFieldPlacementsLoaded(restored.fieldPlacementsLoaded)
+      setFieldPlacementError(null)
+      setIsLoadingFieldPlacements(false)
+      setFieldLeagueDivisions(restored.fieldLeagueDivisions)
+      setFieldLeagueDivisionsLoaded(restored.fieldLeagueDivisionsLoaded)
+      setFieldLeagueDivisionError(null)
+      setIsLoadingFieldLeagueDivisions(false)
+      setSearchTerm('')
+      setSnapshotShareState('idle')
+      setError(null)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'The snapshot could not be opened.')
+    }
+  }
+
   async function analyzeTournament(reference = tournamentUrl, selectedClassId?: number) {
     const normalizedReference = reference.trim()
     if (!normalizedReference) return
@@ -1268,8 +1316,10 @@ function App() {
     fieldPlacementRequestRef.current += 1
     fieldLeagueRequestRef.current += 1
     setIsAnalyzing(true)
+    setIsViewingSnapshot(false)
     setError(null)
     setShareCopied(false)
+    setSnapshotShareState('idle')
     setSelectedPairId(null)
     setPairHistory(null)
     setFieldPlacementSummaries({})
@@ -1307,10 +1357,12 @@ function App() {
     setLeagueReference(normalizedReference)
     setShowLeagueSearch(false)
     setIsAnalyzingLeague(true)
+    setIsViewingSnapshot(false)
     setIsLoadingLeaguePool(false)
     setLeagueError(null)
     setLeagueSnapshot(null)
     setShareCopied(false)
+    setSnapshotShareState('idle')
     updateSharedLocation({ mode: 'league', league: normalizedReference, poolId: selectedPoolId })
 
     try {
@@ -1339,6 +1391,8 @@ function App() {
     setPlayerLeagueError(null)
     setShowPlayerSearch(false)
     setShareCopied(false)
+    setIsViewingSnapshot(false)
+    setSnapshotShareState('idle')
     setPlayerProfile(null)
     setPlayerAnalysis(null)
     setPlayerLeagueAnalysis(null)
@@ -1470,6 +1524,36 @@ function App() {
     }
   }
 
+  async function copySnapshotLink() {
+    const input = tournamentExportInput()
+    if (!input || !canExportTournament || typeof navigator === 'undefined') return
+
+    setSnapshotShareState('creating')
+    let link = ''
+    let usedFallback = false
+    try {
+      link = await buildTournamentSnapshotUrl(input)
+      try {
+        link = (await shortenSnapshotUrl(link)).url
+      } catch {
+        usedFallback = true
+      }
+    } catch {
+      setSnapshotShareState('idle')
+      setError('The snapshot link could not be created.')
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(link)
+      setSnapshotShareState(usedFallback ? 'fallback' : 'copied')
+      window.setTimeout(() => setSnapshotShareState('idle'), 2600)
+    } catch {
+      setSnapshotShareState('idle')
+      setError(usedFallback ? snapshotShorteningError() : 'The snapshot link could not be copied. Copy it from the browser address bar instead.')
+    }
+  }
+
   function printTournamentReport() {
     if (!canExportTournament) return
     window.print()
@@ -1498,6 +1582,7 @@ function App() {
     if (!nextClass || nextClass.id === snapshot.selectedClass.id) return
 
     setIsLoadingClass(true)
+    setIsViewingSnapshot(false)
     fieldPlacementRequestRef.current += 1
     fieldLeagueRequestRef.current += 1
     setError(null)
@@ -1649,6 +1734,7 @@ function App() {
     fieldPlacementRequestRef.current += 1
     fieldLeagueRequestRef.current += 1
     setSnapshot(null)
+    setIsViewingSnapshot(false)
     setLeagueSnapshot(null)
     setTournamentUrl('')
     setPlayerReference('')
@@ -1683,6 +1769,7 @@ function App() {
     setShowTournamentSearch(false)
     setShowLeagueSearch(false)
     setShareCopied(false)
+    setSnapshotShareState('idle')
     updateSharedLocation({ mode: 'tournament' })
   }
 
@@ -1713,6 +1800,11 @@ function App() {
     setPlayerError(null)
     setPlayerLeagueError(null)
     setShareCopied(false)
+    setSnapshotShareState('idle')
+    if (isViewingSnapshot && nextMode !== 'tournament') {
+      setSnapshot(null)
+      setIsViewingSnapshot(false)
+    }
     updateSharedLocation({
       mode: nextMode,
       tournament: tournamentUrl,
@@ -1963,14 +2055,29 @@ function App() {
           <>
             <section className="workspace-heading">
           <div>
-            <div className="eyebrow">CURRENT FIELD <span className="live-dot" /> LIVE DATA</div>
+            <div className="eyebrow">CURRENT FIELD {!isViewingSnapshot && <span className="live-dot" />} {isViewingSnapshot ? 'SNAPSHOT' : 'LIVE DATA'}</div>
             <h2>{snapshot.name}</h2>
             <p>{snapshot.location}, {snapshot.country} <span className="muted-divider">/</span> {snapshot.sport} <span className="muted-divider">/</span> {formatDate(snapshot.startDate)}</p>
+            {isViewingSnapshot && <p className="snapshot-note">Shared snapshot · no Rankedin requests are needed to view this report.</p>}
             <p className="print-report-meta">Tournament overview · {classTitle} · Generated {formatDate(new Date().toISOString())} · rankedin.com/en/tournament/{snapshot.tournamentId}</p>
           </div>
           <div className="workspace-actions">
             <button className="text-button share-button" type="button" onClick={() => void copyShareLink()} disabled={!tournamentUrl.trim()}>
               {shareCopied ? <Check size={15} /> : <Copy size={15} />} {shareCopied ? 'Link copied' : 'Copy share link'}
+            </button>
+            <button className="text-button share-button" type="button" onClick={() => void copySnapshotLink()} disabled={!canShareSnapshot}>
+              {snapshotShareState === 'creating'
+                ? <LoaderCircle className="spin" size={15} />
+                : snapshotShareState === 'copied' || snapshotShareState === 'fallback'
+                  ? <Check size={15} />
+                  : <Copy size={15} />}
+              {' '}{snapshotShareState === 'creating'
+                ? 'Creating snapshot link…'
+                : snapshotShareState === 'copied'
+                  ? 'Short link copied'
+                  : snapshotShareState === 'fallback'
+                    ? 'Full link copied'
+                    : 'Share snapshot'}
             </button>
             <button className="outline-button report-print-button" type="button" onClick={printTournamentReport} disabled={!canExportTournament}>
               <Printer size={14} /> Save PDF
