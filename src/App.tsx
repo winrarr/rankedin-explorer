@@ -32,7 +32,9 @@ import {
   getPlayerCurrentLeagueDivision,
   getPlayerLeagueAnalysis,
   getPlayerProfile,
+  getLeagueSnapshot,
   normalizeCompetitionClassName,
+  searchTeamLeaguesByName,
   searchPlayersByName,
   searchTournamentsByName,
   getTournamentSnapshot,
@@ -43,6 +45,8 @@ import {
   type PlayerLeagueDivision,
   type LeagueSeasonAnalysis,
   type LeagueStandingSnapshot,
+  type LeagueSearchResult,
+  type LeagueSnapshot,
   type PlayerProfile,
   type PlayerSearchResult,
   type TournamentSearchResult,
@@ -78,6 +82,7 @@ import {
   placementSummaryPosition,
 } from './lib/formatters'
 import { PlayerHistoryColumn } from './components/PlayerHistoryColumn'
+import { LeagueExplorer } from './components/LeagueExplorer'
 import { usePublicSearch } from './hooks/usePublicSearch'
 import {
   downloadTournamentCsv,
@@ -89,42 +94,52 @@ const PLAYER_PROGRESS_HISTORY_LIMIT = 25
 const FIELD_PLACEMENT_CONCURRENCY = 3
 const FIELD_LEAGUE_CONCURRENCY = 6
 
-type WorkspaceMode = 'tournament' | 'player'
+type WorkspaceMode = 'tournament' | 'player' | 'league'
 
 type SharedLocation = {
   mode: WorkspaceMode
   tournamentReference: string
   classId: number | undefined
   playerReference: string
+  leagueReference: string
+  poolId: number | undefined
 }
 
 function readSharedLocation(): SharedLocation {
   if (typeof window === 'undefined') {
-    return { mode: 'tournament', tournamentReference: '', classId: undefined, playerReference: '' }
+    return { mode: 'tournament', tournamentReference: '', classId: undefined, playerReference: '', leagueReference: '', poolId: undefined }
   }
 
   const params = new URLSearchParams(window.location.search)
   const tournamentReference = params.get('tournament')?.trim() ?? ''
   const playerReference = params.get('player')?.trim() ?? ''
+  const leagueReference = params.get('league')?.trim() ?? ''
   const modeParam = params.get('mode')
-  const mode: WorkspaceMode = modeParam === 'player' || (!tournamentReference && playerReference)
-    ? 'player'
-    : 'tournament'
+  const mode: WorkspaceMode = modeParam === 'league' || (!tournamentReference && !playerReference && leagueReference)
+    ? 'league'
+    : modeParam === 'player' || (!tournamentReference && playerReference)
+      ? 'player'
+      : 'tournament'
   const classValue = Number(params.get('class'))
+  const poolValue = Number(params.get('pool'))
 
   return {
     mode,
     tournamentReference,
     classId: Number.isInteger(classValue) && classValue > 0 ? classValue : undefined,
     playerReference,
+    leagueReference,
+    poolId: Number.isInteger(poolValue) && poolValue > 0 ? poolValue : undefined,
   }
 }
 
-function updateSharedLocation({ mode, tournament, classId, player }: {
+function updateSharedLocation({ mode, tournament, classId, player, league, poolId }: {
   mode: WorkspaceMode
   tournament?: string
   classId?: number
   player?: string
+  league?: string
+  poolId?: number
 }) {
   if (typeof window === 'undefined') return
 
@@ -137,6 +152,11 @@ function updateSharedLocation({ mode, tournament, classId, player }: {
   if (mode === 'player' && player?.trim()) {
     params.set('mode', mode)
     params.set('player', player.trim())
+  }
+  if (mode === 'league' && league?.trim()) {
+    params.set('mode', mode)
+    params.set('league', league.trim())
+    if (poolId) params.set('pool', String(poolId))
   }
 
   const query = params.toString()
@@ -151,6 +171,11 @@ function isDirectTournamentReference(value: string) {
 function isDirectPlayerReference(value: string) {
   const trimmed = value.trim()
   return /^R\d+$/i.test(trimmed) || /\/player\/R\d+/i.test(trimmed)
+}
+
+function isDirectLeagueReference(value: string) {
+  const trimmed = value.trim()
+  return /^\d{2,}$/.test(trimmed) || /\/teamleague\/\d+/i.test(trimmed)
 }
 
 function pairRating(pair: PairRecord) {
@@ -533,6 +558,111 @@ function leagueResultColor(result: LeagueStandingSnapshot['result']) {
   return '#8d9994'
 }
 
+function leagueFixtureResultLabel(result: boolean | null) {
+  if (result === true) return 'W'
+  if (result === false) return 'L'
+  return 'D'
+}
+
+function leagueFixtureResultClass(result: boolean | null) {
+  if (result === true) return 'win'
+  if (result === false) return 'loss'
+  return 'draw'
+}
+
+function orderedLeagueSeasons(seasons: LeagueSeasonAnalysis[]) {
+  return [...seasons].sort((first, second) => dateTimestamp(second.startDate) - dateTimestamp(first.startDate))
+}
+
+function LeagueSeasonComparison({ seasons }: { seasons: LeagueSeasonAnalysis[] }) {
+  const [current, previous] = orderedLeagueSeasons(seasons)
+  if (!current || !previous) return null
+
+  const currentDivision = leagueDivisionIndex(current.divisionName)
+  const previousDivision = leagueDivisionIndex(previous.divisionName)
+  const divisionMovement = currentDivision < previousDivision
+    ? 'Moved up a division level'
+    : currentDivision > previousDivision
+      ? 'Moved down a division level'
+      : 'Same division level'
+  const standingMovement = current.teamStanding !== null && previous.teamStanding !== null
+    ? `${ordinalPosition(previous.teamStanding)} → ${ordinalPosition(current.teamStanding)}`
+    : '—'
+  const currentFixtures = current.fixtures.filter((fixture) => fixture.won !== null)
+  const currentWins = currentFixtures.filter((fixture) => fixture.won === true).length
+  const previousFixtures = previous.fixtures.filter((fixture) => fixture.won !== null)
+  const previousWins = previousFixtures.filter((fixture) => fixture.won === true).length
+
+  return (
+    <section className="field-card league-comparison-card" aria-label="Lunar League season comparison">
+      <div className="card-heading">
+        <div>
+          <div className="section-kicker">SEASON COMPARISON</div>
+          <h2>Latest versus previous</h2>
+          <p>{current.name} compared with {previous.name}. Division labels remain categorical.</p>
+        </div>
+        <History size={18} className="card-heading-icon" />
+      </div>
+      <div className="league-comparison-grid">
+        <div><span>DIVISION LEVEL</span><strong>{divisionMovement}</strong><small>{previous.divisionName} → {current.divisionName}</small></div>
+        <div><span>TABLE POSITION</span><strong>{standingMovement}</strong><small>previous → latest</small></div>
+        <div><span>TEAM FORM</span><strong>{previousWins}–{previousFixtures.length - previousWins} → {currentWins}–{currentFixtures.length - currentWins}</strong><small>wins–losses by season</small></div>
+      </div>
+    </section>
+  )
+}
+
+function PlayerRecentForm({ analysis, seasons }: { analysis: PlayerAnalysis; seasons: LeagueSeasonAnalysis[] }) {
+  const tournamentPoints = progressPoints(analysis.events)
+    .sort((first, second) => dateTimestamp(second.event.startDate) - dateTimestamp(first.event.startDate))
+    .slice(0, 5)
+  const latestSeason = orderedLeagueSeasons(seasons)[0]
+  const leagueFixtures = latestSeason?.fixtures
+    .filter((fixture) => fixture.won !== null)
+    .sort((first, second) => dateTimestamp(second.date) - dateTimestamp(first.date))
+    .slice(0, 5) ?? []
+  if (!tournamentPoints.length && !leagueFixtures.length) return null
+
+  return (
+    <section className="field-card recent-form-card" aria-label="Recent form">
+      <div className="card-heading">
+        <div>
+          <div className="section-kicker">RECENT FORM</div>
+          <h2>What happened lately?</h2>
+          <p>Recent finishes and the latest available Lunar League fixtures are kept separate from long-term history.</p>
+        </div>
+        <Activity size={18} className="card-heading-icon" />
+      </div>
+      <div className="recent-form-grid">
+        <div className="recent-form-track">
+          <span className="recent-form-label">TOURNAMENT FINISHES</span>
+          <div className="recent-form-chips">
+            {tournamentPoints.map((point) => (
+              <span className="recent-form-chip tournament" key={point.event.id} style={placementGradient(point.event)} title={`${formatCompactDate(point.event.startDate)} · ${point.event.name}`}>
+                {placementSummaryPosition(point.event)}
+              </span>
+            ))}
+            {!tournamentPoints.length && <span className="recent-form-empty">No comparable finishes</span>}
+          </div>
+          <small>Newest first · lower placement is better</small>
+        </div>
+        <div className="recent-form-track">
+          <span className="recent-form-label">LATEST LEAGUE FIXTURES</span>
+          <div className="recent-form-chips">
+            {leagueFixtures.map((fixture) => (
+              <span className={`recent-form-chip league ${leagueFixtureResultClass(fixture.won)}`} key={fixture.id} title={`${formatCompactDate(fixture.date)} · vs ${fixture.opponentTeam}`}>
+                {leagueFixtureResultLabel(fixture.won)}
+              </span>
+            ))}
+            {!leagueFixtures.length && <span className="recent-form-empty">No played league fixtures</span>}
+          </div>
+          <small>{latestSeason ? `Newest season · ${latestSeason.divisionName}` : 'No league season found'}</small>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function leagueSeasonAxisLabel(season: LeagueSeasonAnalysis) {
   const seasonLabel = season.name.match(/(?:Forår|Efterår|Spring|Autumn)\s+\d{4}/i)
   return seasonLabel?.[0] ?? formatCompactDate(season.startDate)
@@ -733,6 +863,7 @@ function LeagueProgressSection({ seasons, isLoading, error }: LeagueProgressSect
       {error && <p className="league-error"><CircleHelp size={14} /> {error}</p>}
       {!!seasons.length && (
         <>
+          <LeagueSeasonComparison seasons={seasons} />
           <LeagueProgressChart seasons={seasons} />
           <div className="league-season-grid">
             {seasons.map((season) => {
@@ -843,6 +974,8 @@ function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueErro
             <MetricCard icon={<CalendarDays size={15} />} label="LATEST RESULT" value={latestPoint ? formatPercent(latestPoint.percentage) : '—'} detail={latestPoint ? formatCompactDate(latestPoint.event.startDate) : 'no comparable result'} />
           </section>
 
+          <PlayerRecentForm analysis={analysis} seasons={leagueAnalysis?.seasons ?? []} />
+
           <section className="field-card progress-card">
             <div className="card-heading">
               <div>
@@ -921,6 +1054,7 @@ function App() {
   const [activeMode, setActiveMode] = useState<WorkspaceMode>(initialLocation.mode)
   const [tournamentUrl, setTournamentUrl] = useState(initialLocation.tournamentReference)
   const [playerReference, setPlayerReference] = useState(initialLocation.playerReference)
+  const [leagueReference, setLeagueReference] = useState(initialLocation.leagueReference)
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null)
   const [playerAnalysis, setPlayerAnalysis] = useState<PlayerAnalysis | null>(null)
   const [playerLeagueAnalysis, setPlayerLeagueAnalysis] = useState<PlayerLeagueAnalysis | null>(null)
@@ -930,6 +1064,10 @@ function App() {
   const [playerError, setPlayerError] = useState<string | null>(null)
   const [playerLeagueError, setPlayerLeagueError] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<TournamentSnapshot | null>(null)
+  const [leagueSnapshot, setLeagueSnapshot] = useState<LeagueSnapshot | null>(null)
+  const [isAnalyzingLeague, setIsAnalyzingLeague] = useState(false)
+  const [isLoadingLeaguePool, setIsLoadingLeaguePool] = useState(false)
+  const [leagueError, setLeagueError] = useState<string | null>(null)
   const [selectedPairId, setSelectedPairId] = useState<string | null>(null)
   const [pairHistory, setPairHistory] = useState<{
     first: { analysis: PlayerAnalysis | null; error: string | null }
@@ -949,13 +1087,16 @@ function App() {
   const [fieldLeagueDivisionError, setFieldLeagueDivisionError] = useState<string | null>(null)
   const [showPlayerSearch, setShowPlayerSearch] = useState(false)
   const [showTournamentSearch, setShowTournamentSearch] = useState(false)
+  const [showLeagueSearch, setShowLeagueSearch] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
   const fieldPlacementRequestRef = useRef(0)
   const fieldLeagueRequestRef = useRef(0)
   const tournamentRequestRef = useRef(0)
   const playerRequestRef = useRef(0)
+  const leagueRequestRef = useRef(0)
   const lastAnalyzedTournamentReferenceRef = useRef('')
   const lastAnalyzedPlayerReferenceRef = useRef('')
+  const lastAnalyzedLeagueReferenceRef = useRef('')
   const searchAnchorRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [showPreferences, setShowPreferences] = useState(false)
@@ -972,6 +1113,12 @@ function App() {
     label: 'Tournament',
     search: searchTournamentsByName,
   })
+  const leagueSearch = usePublicSearch({
+    enabled: activeMode === 'league' && showLeagueSearch && !isDirectLeagueReference(leagueReference),
+    term: leagueReference,
+    label: 'League',
+    search: searchTeamLeaguesByName,
+  })
 
   useEffect(() => {
     savePreferences(preferences)
@@ -985,6 +1132,9 @@ function App() {
     if (initialLocation.mode === 'player' && initialLocation.playerReference) {
       void analyzePlayer(initialLocation.playerReference)
     }
+    if (initialLocation.mode === 'league' && initialLocation.leagueReference) {
+      void analyzeLeague(initialLocation.leagueReference, initialLocation.poolId)
+    }
   }, [initialLocation])
 
   useEffect(() => {
@@ -993,6 +1143,7 @@ function App() {
       if (!searchAnchorRef.current?.contains(event.target)) {
         setShowPlayerSearch(false)
         setShowTournamentSearch(false)
+        setShowLeagueSearch(false)
       }
     }
 
@@ -1031,6 +1182,22 @@ function App() {
 
     return () => window.clearTimeout(timeout)
   }, [activeMode, tournamentUrl])
+
+  useEffect(() => {
+    const normalizedReference = leagueReference.trim()
+    if (activeMode !== 'league' || !isDirectLeagueReference(normalizedReference)) {
+      lastAnalyzedLeagueReferenceRef.current = ''
+      return
+    }
+    if (normalizedReference === lastAnalyzedLeagueReferenceRef.current) return
+
+    const timeout = window.setTimeout(() => {
+      if (normalizedReference === lastAnalyzedLeagueReferenceRef.current) return
+      void analyzeLeague(normalizedReference)
+    }, 550)
+
+    return () => window.clearTimeout(timeout)
+  }, [activeMode, leagueReference])
 
   useEffect(() => {
     if (activeMode !== 'tournament' || !snapshot) return
@@ -1130,6 +1297,35 @@ function App() {
     }
   }
 
+  async function analyzeLeague(reference = leagueReference, selectedPoolId?: number) {
+    const normalizedReference = reference.trim()
+    if (!normalizedReference) return
+
+    const requestId = leagueRequestRef.current + 1
+    leagueRequestRef.current = requestId
+    lastAnalyzedLeagueReferenceRef.current = normalizedReference
+    setLeagueReference(normalizedReference)
+    setShowLeagueSearch(false)
+    setIsAnalyzingLeague(true)
+    setIsLoadingLeaguePool(false)
+    setLeagueError(null)
+    setLeagueSnapshot(null)
+    setShareCopied(false)
+    updateSharedLocation({ mode: 'league', league: normalizedReference, poolId: selectedPoolId })
+
+    try {
+      const result = await getLeagueSnapshot(normalizedReference, selectedPoolId)
+      if (requestId !== leagueRequestRef.current) return
+      setLeagueSnapshot(result)
+      updateSharedLocation({ mode: 'league', league: normalizedReference, poolId: result.selectedPool?.id })
+    } catch (caught) {
+      if (requestId !== leagueRequestRef.current) return
+      setLeagueError(caught instanceof Error ? caught.message : 'The Lunar League could not be loaded.')
+    } finally {
+      if (requestId === leagueRequestRef.current) setIsAnalyzingLeague(false)
+    }
+  }
+
   async function analyzePlayer(reference = playerReference) {
     const normalizedReference = reference.trim()
     if (!normalizedReference) return
@@ -1216,6 +1412,11 @@ function App() {
     void analyzeTournament(String(tournament.id))
   }
 
+  function selectLeagueSearchResult(league: LeagueSearchResult) {
+    setLeagueReference(String(league.id))
+    void analyzeLeague(String(league.id))
+  }
+
   function clearReference() {
     if (activeMode === 'tournament') {
       setTournamentUrl('')
@@ -1225,8 +1426,33 @@ function App() {
     }
 
     setPlayerReference('')
+    setLeagueReference('')
     setShowPlayerSearch(false)
+    setShowLeagueSearch(false)
+    if (activeMode === 'league') {
+      updateSharedLocation({ mode: 'league' })
+      return
+    }
     updateSharedLocation({ mode: 'player' })
+  }
+
+  async function chooseLeaguePool(poolId: number) {
+    if (!leagueSnapshot || poolId === leagueSnapshot.selectedPool?.id) return
+    const requestId = leagueRequestRef.current + 1
+    leagueRequestRef.current = requestId
+    setIsLoadingLeaguePool(true)
+    setLeagueError(null)
+    try {
+      const result = await getLeagueSnapshot(leagueReference, poolId)
+      if (requestId !== leagueRequestRef.current) return
+      setLeagueSnapshot(result)
+      updateSharedLocation({ mode: 'league', league: leagueReference, poolId: result.selectedPool?.id })
+    } catch (caught) {
+      if (requestId !== leagueRequestRef.current) return
+      setLeagueError(caught instanceof Error ? caught.message : 'This league pool could not be loaded.')
+    } finally {
+      if (requestId === leagueRequestRef.current) setIsLoadingLeaguePool(false)
+    }
   }
 
   async function copyShareLink() {
@@ -1239,7 +1465,8 @@ function App() {
     } catch {
       const message = 'The share link could not be copied. Copy the address from your browser instead.'
       if (activeMode === 'tournament') setError(message)
-      else setPlayerError(message)
+      else if (activeMode === 'player') setPlayerError(message)
+      else setLeagueError(message)
     }
   }
 
@@ -1417,12 +1644,15 @@ function App() {
   function resetToHome() {
     tournamentRequestRef.current += 1
     playerRequestRef.current += 1
+    leagueRequestRef.current += 1
     setActiveMode('tournament')
     fieldPlacementRequestRef.current += 1
     fieldLeagueRequestRef.current += 1
     setSnapshot(null)
+    setLeagueSnapshot(null)
     setTournamentUrl('')
     setPlayerReference('')
+    setLeagueReference('')
     setSelectedPairId(null)
     setPairHistory(null)
     setFieldPlacementSummaries({})
@@ -1434,6 +1664,8 @@ function App() {
     setFieldLeagueDivisionError(null)
     setIsLoadingFieldLeagueDivisions(false)
     setIsAnalyzing(false)
+    setIsAnalyzingLeague(false)
+    setIsLoadingLeaguePool(false)
     setIsLoadingClass(false)
     setIsLoadingPair(false)
     setSearchTerm('')
@@ -1446,8 +1678,10 @@ function App() {
     setPlayerLeagueError(null)
     setIsAnalyzingPlayer(false)
     setPlayerLoadingStage(null)
+    setLeagueError(null)
     setShowPlayerSearch(false)
     setShowTournamentSearch(false)
+    setShowLeagueSearch(false)
     setShareCopied(false)
     updateSharedLocation({ mode: 'tournament' })
   }
@@ -1457,9 +1691,12 @@ function App() {
 
     tournamentRequestRef.current += 1
     playerRequestRef.current += 1
+    leagueRequestRef.current += 1
     fieldPlacementRequestRef.current += 1
     fieldLeagueRequestRef.current += 1
     setIsAnalyzing(false)
+    setIsAnalyzingLeague(false)
+    setIsLoadingLeaguePool(false)
     setIsLoadingClass(false)
     setIsLoadingPair(false)
     setIsLoadingFieldPlacements(false)
@@ -1471,6 +1708,7 @@ function App() {
     setActiveMode(nextMode)
     setShowPlayerSearch(false)
     setShowTournamentSearch(false)
+    setShowLeagueSearch(false)
     setError(null)
     setPlayerError(null)
     setPlayerLeagueError(null)
@@ -1480,6 +1718,8 @@ function App() {
       tournament: tournamentUrl,
       classId: snapshot?.selectedClass.id,
       player: playerReference,
+      league: leagueReference,
+      poolId: leagueSnapshot?.selectedPool?.id,
     })
   }
 
@@ -1584,6 +1824,15 @@ function App() {
             >
               <LineChart size={15} /> Player Progress
             </button>
+            <button
+              className={activeMode === 'league' ? 'is-active' : ''}
+              type="button"
+              role="tab"
+              aria-selected={activeMode === 'league'}
+              onClick={() => switchMode('league')}
+            >
+              <GitBranch size={15} /> League Explorer
+            </button>
           </div>
         </div>
       </nav>
@@ -1598,41 +1847,45 @@ function App() {
             </p>
 
             <div className="input-card">
-              <label htmlFor={activeMode === 'tournament' ? 'tournament-url' : 'player-reference'}>
-                {activeMode === 'tournament' ? 'Start with a public tournament' : 'Find a public Rankedin player'}
+              <label htmlFor={activeMode === 'tournament' ? 'tournament-url' : activeMode === 'player' ? 'player-reference' : 'league-reference'}>
+                {activeMode === 'tournament' ? 'Start with a public tournament' : activeMode === 'player' ? 'Find a public Rankedin player' : 'Start with a public Lunar League'}
               </label>
               <div className="reference-search-anchor" ref={searchAnchorRef}>
                 <div className="url-input-row">
                   <div className="url-input-wrap">
-                    {activeMode === 'tournament' ? <GitBranch size={17} /> : <Search size={17} />}
+                    {activeMode === 'tournament' || activeMode === 'league' ? <GitBranch size={17} /> : <Search size={17} />}
                     <input
-                      id={activeMode === 'tournament' ? 'tournament-url' : 'player-reference'}
-                      value={activeMode === 'tournament' ? tournamentUrl : playerReference}
+                      id={activeMode === 'tournament' ? 'tournament-url' : activeMode === 'player' ? 'player-reference' : 'league-reference'}
+                      value={activeMode === 'tournament' ? tournamentUrl : activeMode === 'player' ? playerReference : leagueReference}
                       onChange={(event) => {
                         if (activeMode === 'tournament') {
                           setTournamentUrl(event.target.value)
                           setShowTournamentSearch(true)
-                        } else {
+                        } else if (activeMode === 'player') {
                           setPlayerReference(event.target.value)
                           setShowPlayerSearch(true)
+                        } else {
+                          setLeagueReference(event.target.value)
+                          setShowLeagueSearch(true)
                         }
                       }}
                       onFocus={() => {
                         if (activeMode === 'tournament' && !isDirectTournamentReference(tournamentUrl)) setShowTournamentSearch(true)
                         if (activeMode === 'player') setShowPlayerSearch(true)
+                        if (activeMode === 'league' && !isDirectLeagueReference(leagueReference)) setShowLeagueSearch(true)
                       }}
                       onKeyDown={(event) => {
-                        if (event.key === 'Enter' && (activeMode === 'tournament' || isDirectPlayerReference(playerReference))) {
-                          void (activeMode === 'tournament' ? analyzeTournament() : analyzePlayer())
+                        if (event.key === 'Enter' && (activeMode === 'tournament' || (activeMode === 'player' && isDirectPlayerReference(playerReference)) || (activeMode === 'league' && isDirectLeagueReference(leagueReference)))) {
+                          void (activeMode === 'tournament' ? analyzeTournament() : activeMode === 'player' ? analyzePlayer() : analyzeLeague())
                         }
                       }}
-                      placeholder={activeMode === 'tournament' ? 'Search tournament name, URL or ID' : 'Search player name, profile URL or R-number'}
+                      placeholder={activeMode === 'tournament' ? 'Search tournament name, URL or ID' : activeMode === 'player' ? 'Search player name, profile URL or R-number' : 'Search Lunar League name, URL or ID'}
                     />
-                    {(activeMode === 'tournament' ? tournamentUrl : playerReference) && <button className="clear-input" type="button" aria-label={`Clear ${activeMode} reference`} onClick={clearReference}><X size={14} /></button>}
+                    {(activeMode === 'tournament' ? tournamentUrl : activeMode === 'player' ? playerReference : leagueReference) && <button className="clear-input" type="button" aria-label={`Clear ${activeMode} reference`} onClick={clearReference}><X size={14} /></button>}
                   </div>
-                  <button className="primary-button" type="button" onClick={() => void (activeMode === 'tournament' ? analyzeTournament() : analyzePlayer())} disabled={activeMode === 'tournament' ? isAnalyzing || !tournamentUrl.trim() : isAnalyzingPlayer || !isDirectPlayerReference(playerReference)}>
-                    {(activeMode === 'tournament' ? isAnalyzing : isAnalyzingPlayer) ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}
-                    {(activeMode === 'tournament' ? isAnalyzing : isAnalyzingPlayer) ? 'Reading…' : activeMode === 'tournament' ? 'Analyze field' : 'Read progress'}
+                  <button className="primary-button" type="button" onClick={() => void (activeMode === 'tournament' ? analyzeTournament() : activeMode === 'player' ? analyzePlayer() : analyzeLeague())} disabled={activeMode === 'tournament' ? isAnalyzing || !tournamentUrl.trim() : activeMode === 'player' ? isAnalyzingPlayer || !isDirectPlayerReference(playerReference) : isAnalyzingLeague || !isDirectLeagueReference(leagueReference)}>
+                    {(activeMode === 'tournament' ? isAnalyzing : activeMode === 'player' ? isAnalyzingPlayer : isAnalyzingLeague) ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}
+                    {(activeMode === 'tournament' ? isAnalyzing : activeMode === 'player' ? isAnalyzingPlayer : isAnalyzingLeague) ? 'Reading…' : activeMode === 'tournament' ? 'Analyze field' : activeMode === 'player' ? 'Read progress' : 'Read league'}
                   </button>
                 </div>
                 {activeMode === 'tournament' && showTournamentSearch && !isDirectTournamentReference(tournamentUrl) && (
@@ -1669,21 +1922,38 @@ function App() {
                     )}
                   </div>
                 )}
+                {activeMode === 'league' && showLeagueSearch && !isDirectLeagueReference(leagueReference) && (
+                  <div className="tournament-search-panel" role="status">
+                    {leagueSearch.isSearching && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching public Rankedin leagues…</p>}
+                    {leagueSearch.error && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {leagueSearch.error}</p>}
+                    {!leagueSearch.isSearching && !leagueSearch.error && leagueReference.trim().length >= 2 && !leagueSearch.results.length && <p className="player-search-status">No public Lunar Leagues matched that name.</p>}
+                    {!!leagueSearch.results.length && (
+                      <div className="tournament-search-results" role="listbox" aria-label="Lunar League search results">
+                        {leagueSearch.results.map((league) => (
+                          <button className="tournament-search-result" type="button" role="option" key={`${league.id}-${league.startDate}`} onClick={() => selectLeagueSearchResult(league)}>
+                            <span className="tournament-search-result-name">{league.name}</span>
+                            <span className="tournament-search-result-meta">{league.startDate || 'Date unavailable'} · {league.sport ?? 'Sport unavailable'}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <p className="input-hint"><Info size={14} /> No login. No database. {activeMode === 'tournament' ? 'Paste a public tournament URL or ID to begin.' : 'Type a name or paste a public profile URL/R-number.'}</p>
-              {((activeMode === 'tournament' && isAnalyzing) || (activeMode === 'player' && isAnalyzingPlayer && !playerProfile)) && (
+              <p className="input-hint"><Info size={14} /> No login. No database. {activeMode === 'tournament' ? 'Paste a public tournament URL or ID to begin.' : activeMode === 'player' ? 'Type a name or paste a public profile URL/R-number.' : 'Type a league name or paste a public Lunar League URL/ID.'}</p>
+              {((activeMode === 'tournament' && isAnalyzing) || (activeMode === 'player' && isAnalyzingPlayer && !playerProfile) || (activeMode === 'league' && isAnalyzingLeague && !leagueSnapshot)) && (
                 <div className="lookup-loading-state" role="status" aria-live="polite">
                   <LoaderCircle className="spin" size={16} />
                   <div className="lookup-loading-copy">
-                    <strong>{activeMode === 'tournament' ? 'Loading tournament field' : 'Finding public profile'}</strong>
+                    <strong>{activeMode === 'tournament' ? 'Loading tournament field' : activeMode === 'player' ? 'Finding public profile' : 'Loading Lunar League'}</strong>
                     <span>{activeMode === 'tournament'
                       ? 'Finding event details and reading its class roster. This can take a moment.'
-                      : 'Resolving the profile before reading tournament and Lunar League history.'}</span>
+                      : activeMode === 'player' ? 'Resolving the profile before reading tournament and Lunar League history.' : 'Reading league details, pools, standings and fixtures.'}</span>
                   </div>
                 </div>
               )}
             </div>
-            {(activeMode === 'tournament' ? error : playerError) && <div className="error-banner" role="alert"><CircleHelp size={16} /> {activeMode === 'tournament' ? error : playerError}</div>}
+            {(activeMode === 'tournament' ? error : activeMode === 'player' ? playerError : leagueError) && <div className="error-banner" role="alert"><CircleHelp size={16} /> {activeMode === 'tournament' ? error : activeMode === 'player' ? playerError : leagueError}</div>}
           </div>
 
         </section>
@@ -1932,7 +2202,7 @@ function App() {
             </section>
           </>
           ) : null
-        ) : (
+        ) : activeMode === 'player' ? (
           <PlayerProgressWorkspace
             profile={playerProfile}
             analysis={playerAnalysis}
@@ -1948,7 +2218,16 @@ function App() {
             canShare={Boolean(playerProfile && playerReference.trim())}
             canPrintReport={Boolean(playerProfile)}
           />
-        )}
+        ) : leagueSnapshot ? (
+          <LeagueExplorer
+            snapshot={leagueSnapshot}
+            isLoadingPool={isLoadingLeaguePool}
+            onPoolChange={(poolId) => void chooseLeaguePool(poolId)}
+            onCopyShareLink={() => void copyShareLink()}
+            shareCopied={shareCopied}
+            canShare={Boolean(leagueReference.trim())}
+          />
+        ) : null}
       </main>
 
       <footer className="footer"><span>Rankedin Explorer</span><span>Read-only personal utility <span className="muted-divider">/</span> source data remains with Rankedin</span><a href="https://api.rankedin.com/swagger/v1/swagger.json" target="_blank" rel="noreferrer">API map <ArrowUpRight size={13} /></a></footer>

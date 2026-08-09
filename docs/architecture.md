@@ -11,6 +11,7 @@ Rankedin API
 src/lib/rankedin.ts  ── normalized domain types ──>  React view state
                                                         │
                                                         ├─ temporary tournament exploration
+                                                        ├─ temporary Lunar League exploration
                                                         ├─ temporary player progress analysis
                                                         ├─ browser-only report exports
                                                         └─ small local display preferences
@@ -51,9 +52,19 @@ src/lib/rankedin.ts  ── normalized domain types ──>  React view state
 
 Both modes render incomplete records honestly rather than treating missing data as zero.
 
+### Lunar League Explorer
+
+1. Parse a public Lunar League URL or numeric league ID.
+2. Load league metadata, public pool options and aggregate league totals.
+3. Select a pool, then load its teams, standings and fixtures in parallel.
+4. Show team membership and source links without loading individual doubles by default; detailed match payloads remain a later, explicit drill-down.
+5. Preserve the selected pool in the share URL so a league link opens in the same region/division context.
+
+League loading is league-scoped rather than player-scoped. The Player Progress view continues to enrich only the selected player's teams and fixtures, while League Explorer can show the whole selected pool.
+
 ### Search and loading reliability
 
-Name searches are debounced before requesting the public API. Each search has an abortable request, an eight-second timeout and a request generation check, so stale responses cannot overwrite newer input or leave the interface stuck in a searching state. Direct public IDs bypass name search. Long analyses expose partial results and use explicit loading/error states; a later request generation supersedes earlier work without allowing its callbacks to update the current view.
+Name searches are debounced before requesting the public API. Each search has an abortable request, an eight-second timeout and a request generation check, so stale responses cannot overwrite newer input or leave the interface stuck in a searching state. Tournament, player and Lunar League searches use their corresponding public search paths. Direct public IDs bypass name search. Long analyses expose partial results and use explicit loading/error states; a later request generation supersedes earlier work without allowing its callbacks to update the current view.
 
 ### Report export
 

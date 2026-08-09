@@ -35,6 +35,16 @@ export type TournamentSearchResult = {
   isPremium: boolean | null
 }
 
+export type LeagueSearchResult = {
+  id: number
+  name: string
+  url: string
+  startDate: string
+  sport: string | null
+  countryFlag: string | null
+  isPremium: boolean | null
+}
+
 export type PlayerProfile = PlayerRecord & {
   countryCode: string | null
   homeClubName: string | null
@@ -186,6 +196,98 @@ export type PlayerLeagueDivision = {
   divisionName: string
 }
 
+export type LeaguePool = {
+  id: number
+  name: string
+  divisionName: string
+  regionName: string
+  teamCount: number
+  playerCount: number
+}
+
+export type LeagueTeamPlayer = {
+  name: string
+  url: string
+  countryCode: string | null
+  isCaptain: boolean
+  rating: number | null
+}
+
+export type LeagueTeam = {
+  id: number
+  name: string
+  homeClubName: string | null
+  homeClubUrl: string | null
+  teamUrl: string
+  players: LeagueTeamPlayer[]
+  teamPower: number | null
+}
+
+export type LeagueStanding = {
+  teamId: number
+  teamName: string
+  teamUrl: string
+  standing: number
+  matchPoints: number
+  played: number
+  draws: number
+  wins: number
+  losses: number
+  gamesWon: number
+  gamesLost: number
+  gamesDifference: number
+  teamGamesWon: number
+  teamGamesLost: number
+  teamGamesDifference: number
+  scoredPoints: number
+  concededPoints: number
+  pointsDifference: number
+}
+
+export type LeagueFixtureSide = {
+  id: number
+  name: string
+  url: string
+  score: number | null
+  isWinner: boolean | null
+}
+
+export type LeagueFixture = {
+  id: number
+  date: string
+  round: number | null
+  location: string | null
+  showResults: boolean
+  url: string
+  team1: LeagueFixtureSide
+  team2: LeagueFixtureSide
+}
+
+export type LeagueSnapshot = {
+  leagueId: number
+  name: string
+  startDate: string
+  endDate: string
+  state: number
+  statusText: string | null
+  location: string
+  country: string
+  countryCode: string | null
+  sport: string
+  eventUrl: string
+  clubName: string | null
+  clubUrl: string | null
+  uniquePlayersCount: number
+  totalTeamCount: number
+  totalPlayerCount: number
+  totalClubCount: number
+  pools: LeaguePool[]
+  selectedPool: LeaguePool | null
+  teams: LeagueTeam[]
+  standings: LeagueStanding[]
+  fixtures: LeagueFixture[]
+}
+
 type RawPlayer = {
   Id: number
   RankedinId: string
@@ -207,6 +309,15 @@ type RawTournamentSearchResult = {
   Sport: string | null
   CountryFlag: string | null
   IsPremium: boolean | null
+}
+
+type RawLeagueSearchResult = {
+  Url?: string
+  Name?: string
+  StartDate?: string | null
+  Sport?: string | null
+  CountryFlag?: string | null
+  IsPremium?: boolean | null
 }
 
 type RawParticipant = {
@@ -288,7 +399,87 @@ type RawTeamLeagueHeader = {
   StartDate: string
   EndDate: string
   Sport: number
+  EventState?: number
+  EventStatusText?: string | null
+  City?: string | null
+  Country?: string | null
+  CountryShort?: string | null
+  UniquePlayersCount?: number
   EventUrl?: string
+}
+
+type RawLeaguePoolStatistic = {
+  DivisionName?: string | null
+  RegionName?: string | null
+  TeamsCount?: number
+  PlayersCount?: number
+  PoolId?: number
+}
+
+type RawTeamLeagueInfo = {
+  PoolsStatistics?: {
+    TeamsCount?: number
+    PlayersCount?: number
+    ClubsCount?: number
+  }
+  Club?: {
+    Name?: string | null
+    Url?: string | null
+  }
+  MatchesDetailsModel?: {
+    PoolsWithStatistics?: RawLeaguePoolStatistic[]
+  }
+}
+
+type RawLeaguePoolsResponse = {
+  pools?: Array<{
+    id: number
+    name: string
+    isPrimary: boolean
+  }>
+}
+
+type RawLeaguePoolTeam = {
+  Id: number
+  Name: string
+  HomeClubName?: string | null
+  HomeClubUrl?: string | null
+  Players?: Array<{
+    Name: string
+    Url: string
+    CountryShort?: string | null
+    IsCaptain: boolean
+    Rating: number | null
+  }>
+  TeamUrl?: string | null
+  TeamPower?: number | null
+}
+
+type RawLeaguePoolMatchSide = {
+  url: string
+  isWinner: boolean | null
+  name: string
+  result: number | null
+  id: number
+}
+
+type RawLeaguePoolMatch = {
+  team1: RawLeaguePoolMatchSide
+  team2: RawLeaguePoolMatchSide
+  showResults: boolean
+  url?: string | null
+  location?: string | null
+  date?: string | null
+  details?: {
+    date?: string | null
+    time?: string | null
+    round?: number | null
+  }
+  matchId: number
+}
+
+type RawLeaguePoolMatchesResponse = {
+  matches?: RawLeaguePoolMatch[]
 }
 
 type RawLeagueTeamDetail = {
@@ -867,6 +1058,45 @@ export async function searchTournamentsByName(term: string, take = 8, signal?: A
   })
 }
 
+export function parseLeagueReference(value: string) {
+  const trimmed = value.trim()
+  const directId = /^\d+$/.test(trimmed) ? Number(trimmed) : null
+  if (directId) return { leagueId: directId }
+
+  const match = trimmed.match(/\/teamleague\/(\d+)/i) ?? trimmed.match(/\b(\d{2,})\b/)
+  if (!match) throw new Error('Paste a Rankedin Lunar League URL or numeric league ID.')
+
+  return { leagueId: Number(match[1]) }
+}
+
+export async function searchTeamLeaguesByName(term: string, take = 8, signal?: AbortSignal): Promise<LeagueSearchResult[]> {
+  const normalizedTerm = term.trim()
+  if (!normalizedTerm) return []
+
+  const response = await request<RawLeagueSearchResult[]>(
+    `/Search/GetTeamLeaguesAsync${query({ term: normalizedTerm, language: 'en', take, skip: 0 })}`,
+    signal,
+  )
+
+  return response.flatMap((league) => {
+    if (!league.Url || !league.Name) return []
+    try {
+      const { leagueId } = parseLeagueReference(league.Url)
+      return [{
+        id: leagueId,
+        name: league.Name,
+        url: league.Url,
+        startDate: league.StartDate ?? '',
+        sport: league.Sport ?? null,
+        countryFlag: league.CountryFlag ?? null,
+        isPremium: league.IsPremium ?? null,
+      }]
+    } catch {
+      return []
+    }
+  })
+}
+
 export function parsePlayerReference(value: string) {
   const trimmed = value.trim()
   const directId = /^R\d+$/i.test(trimmed) ? trimmed : null
@@ -971,6 +1201,156 @@ export async function getTournamentSnapshot(
     classes,
     selectedClass,
     participants: await getClassParticipants(tournamentId, selectedClass.id),
+  }
+}
+
+function leaguePoolParts(name: string) {
+  const separator = name.indexOf(' - ')
+  if (separator < 0) return { regionName: 'Region unavailable', divisionName: name }
+  return {
+    regionName: name.slice(0, separator).trim() || 'Region unavailable',
+    divisionName: name.slice(separator + 3).trim() || 'Division unavailable',
+  }
+}
+
+function teamIdFromUrl(url: string) {
+  const match = url.match(/\/team\/homepage\/(\d+)/i)
+  return match ? Number(match[1]) : null
+}
+
+function normalizeLeaguePool(
+  pool: { id: number; name: string },
+  statistics: RawLeaguePoolStatistic[],
+): LeaguePool {
+  const parts = leaguePoolParts(pool.name)
+  const stat = statistics.find((item) => item.PoolId === pool.id)
+  return {
+    id: pool.id,
+    name: pool.name,
+    divisionName: stat?.DivisionName?.trim() || parts.divisionName,
+    regionName: stat?.RegionName?.trim() || parts.regionName,
+    teamCount: stat?.TeamsCount ?? 0,
+    playerCount: stat?.PlayersCount ?? 0,
+  }
+}
+
+function normalizeLeagueTeam(team: RawLeaguePoolTeam): LeagueTeam {
+  return {
+    id: team.Id,
+    name: team.Name,
+    homeClubName: team.HomeClubName || null,
+    homeClubUrl: team.HomeClubUrl || null,
+    teamUrl: team.TeamUrl || `/en/team/homepage/${team.Id}`,
+    players: (team.Players ?? []).map((player) => ({
+      name: player.Name,
+      url: player.Url,
+      countryCode: player.CountryShort || null,
+      isCaptain: player.IsCaptain,
+      rating: player.Rating,
+    })),
+    teamPower: team.TeamPower ?? null,
+  }
+}
+
+function normalizeLeagueStanding(standing: RawTeamStanding, teamsByName: Map<string, LeagueTeam>): LeagueStanding {
+  const teamId = teamIdFromUrl(standing.participantUrl) ?? teamsByName.get(standing.participantName)?.id ?? standing.participantId
+  return {
+    teamId,
+    teamName: standing.participantName,
+    teamUrl: standing.participantUrl,
+    standing: standing.standing,
+    matchPoints: standing.matchPoints,
+    played: standing.played,
+    draws: standing.draws,
+    wins: standing.wins,
+    losses: standing.losses,
+    gamesWon: standing.gamesWon,
+    gamesLost: standing.gamesLost,
+    gamesDifference: standing.gamesDifference,
+    teamGamesWon: standing.teamGamesWon,
+    teamGamesLost: standing.teamGamesLost,
+    teamGamesDifference: standing.teamGamesDifference,
+    scoredPoints: standing.scoredPoints,
+    concededPoints: standing.concededPoints,
+    pointsDifference: standing.pointsDifference,
+  }
+}
+
+function normalizeLeaguePoolFixture(fixture: RawLeaguePoolMatch): LeagueFixture {
+  const date = fixture.details?.time || fixture.details?.date || fixture.date || ''
+  const normalizeSide = (side: RawLeaguePoolMatchSide): LeagueFixtureSide => ({
+    id: side.id,
+    name: side.name,
+    url: side.url,
+    score: fixture.showResults ? side.result : null,
+    isWinner: fixture.showResults ? side.isWinner : null,
+  })
+
+  return {
+    id: fixture.matchId,
+    date,
+    round: fixture.details?.round ?? null,
+    location: fixture.location || null,
+    showResults: fixture.showResults,
+    url: fixture.url || `/en/team/matchresults/${fixture.matchId}`,
+    team1: normalizeSide(fixture.team1),
+    team2: normalizeSide(fixture.team2),
+  }
+}
+
+export async function getLeagueSnapshot(reference: string, selectedPoolId?: number): Promise<LeagueSnapshot> {
+  const { leagueId } = parseLeagueReference(reference)
+  const [header, info, poolsResponse] = await Promise.all([
+    request<RawTeamLeagueHeader>(`/teamleague/GetHeaderAsync${query({ id: leagueId, language: 'en' })}`),
+    request<RawTeamLeagueInfo>(`/teamleague/GetInfoAsync${query({ id: leagueId, language: 'en' })}`),
+    request<RawLeaguePoolsResponse>(`/teamleague/GetPoolsInfoAsync${query({ id: leagueId })}`),
+  ])
+  const statistics = info.MatchesDetailsModel?.PoolsWithStatistics ?? []
+  const pools = (poolsResponse.pools ?? []).map((pool) => normalizeLeaguePool(pool, statistics))
+  const selectedPool = pools.find((pool) => pool.id === selectedPoolId) ?? pools[0] ?? null
+  const base: Omit<LeagueSnapshot, 'selectedPool' | 'teams' | 'standings' | 'fixtures'> = {
+    leagueId,
+    name: header.Name,
+    startDate: header.StartDate,
+    endDate: header.EndDate,
+    state: header.EventState ?? 0,
+    statusText: header.EventStatusText ?? null,
+    location: header.City || 'Location unavailable',
+    country: header.Country || 'Country unavailable',
+    countryCode: header.CountryShort || null,
+    sport: sportName(header.Sport),
+    eventUrl: header.EventUrl || `/en/teamleague/${leagueId}`,
+    clubName: info.Club?.Name ?? null,
+    clubUrl: info.Club?.Url ?? null,
+    uniquePlayersCount: header.UniquePlayersCount ?? info.PoolsStatistics?.PlayersCount ?? 0,
+    totalTeamCount: info.PoolsStatistics?.TeamsCount ?? 0,
+    totalPlayerCount: info.PoolsStatistics?.PlayersCount ?? 0,
+    totalClubCount: info.PoolsStatistics?.ClubsCount ?? 0,
+    pools,
+  }
+
+  if (!selectedPool) {
+    return { ...base, selectedPool: null, teams: [], standings: [], fixtures: [] }
+  }
+
+  const [rawTeams, standingsResponse, matchesResponse] = await Promise.all([
+    request<RawLeaguePoolTeam[]>(`/teamleague/GetPoolTeamsAsync${query({ poolId: selectedPool.id, language: 'en' })}`),
+    request<RawTeamStandingsResponse>(`/teamleague/GetTeamStandingsAsync${query({ poolId: selectedPool.id, language: 'en' })}`),
+    request<RawLeaguePoolMatchesResponse>(`/teamleague/GetMatchesForPoolAsync${query({ poolId: selectedPool.id, language: 'en' })}`),
+  ])
+  const teams = rawTeams.map(normalizeLeagueTeam)
+  const teamsByName = new Map(teams.map((team) => [team.name, team]))
+
+  return {
+    ...base,
+    selectedPool,
+    teams,
+    standings: standingsResponse.scoresViewModels
+      .map((standing) => normalizeLeagueStanding(standing, teamsByName))
+      .sort((first, second) => first.standing - second.standing),
+    fixtures: (matchesResponse.matches ?? [])
+      .map(normalizeLeaguePoolFixture)
+      .sort((first, second) => parseRankedinDate(first.date) - parseRankedinDate(second.date)),
   }
 }
 

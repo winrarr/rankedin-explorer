@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { tournament68954ClassLabels } from './fixtures/tournament-68954-class-labels'
 import { additionalTournamentClassLabels } from './fixtures/tournament-class-labels'
-import { normalizeCompetitionClassName, parsePlayerReference, parseTournamentReference, parseWinLossRecord } from './rankedin'
+import { normalizeCompetitionClassName, parseLeagueReference, parsePlayerReference, parseTournamentReference, parseWinLossRecord } from './rankedin'
 
 describe('parseTournamentReference', () => {
   it('accepts a full Rankedin tournament URL', () => {
@@ -32,6 +32,20 @@ describe('parsePlayerReference', () => {
 
   it('rejects unrelated input', () => {
     expect(() => parsePlayerReference('not a player')).toThrow(/Rankedin player profile/)
+  })
+})
+
+describe('parseLeagueReference', () => {
+  it('accepts a full Rankedin team league URL', () => {
+    expect(parseLeagueReference('https://www.rankedin.com/en/teamleague/273/lunar-ligaen-efterar-2021')).toEqual({ leagueId: 273 })
+  })
+
+  it('accepts a league ID', () => {
+    expect(parseLeagueReference('273')).toEqual({ leagueId: 273 })
+  })
+
+  it('rejects unrelated input', () => {
+    expect(() => parseLeagueReference('not a league')).toThrow(/Rankedin Lunar League URL/)
   })
 })
 

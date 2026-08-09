@@ -16,6 +16,11 @@ These stories define the current product direction. The MVP is intentionally foc
 10. As a user, I want to see an event's sport, format, location, dates and state.
 11. As a user, I want to see draws, rounds and completed results.
 
+## Lunar League exploration
+
+L1. As a user, I want to paste or search for a public Lunar League so that I can inspect a league without starting from a player.
+L2. As a user, I want to switch between Lunar League pools so that I can compare regions and divisions within the same season.
+
 ## Player history and strength
 
 12. As a user, I want to select any player from a tournament roster.

@@ -12,9 +12,12 @@ The browser client uses the public base URL `https://api.rankedin.com/v1`. API a
 - The same profile response exposes current-year and career doubles records; the pair history displays those normalized win-loss values without fetching every career match.
 - `GET /Search/GetPlayersByNameSimpleAsync?name=...&take=...&skip=...` returns compact public player search results with the numeric ID, display name and `R...` identifier.
 - `GET /Search/GetTournamentsAsync?term=...&language=en&take=...&skip=...` returns public tournament suggestions with the event URL, name, date and sport.
+- `GET /Search/GetTeamLeaguesAsync?term=...&language=en&take=...&skip=...` returns public team league suggestions with the league URL, name, date and sport.
 - `GET /Player/ParticipatedEventsAsync?PlayerId=...&Language=en&Skip=...&Take=...` returns a player's participated events. The app currently keeps finished tournament events (`State === 4` and `Type === 4`).
 - The tournament field view can reuse that participated-event response to select each player's newest Lunar League event (`Type === 3`) and then resolve only its `divisionName` through the team-detail endpoint. Older seasons, standings and placement are intentionally excluded from this summary.
 - `GET /TeamLeague/GetHeaderAsync?id=...&language=en` and `GET /TeamLeague/GetTeamLeagueTeamDetailsAsync?teamLeagueId=...&participantId=...&language=en` resolve a player's Lunar League season and team without scanning every league pool.
+- `GET /TeamLeague/GetInfoAsync?id=...&language=en` returns league-level totals, organization metadata and pool statistics. `GET /TeamLeague/GetPoolsInfoAsync?id=...` returns the public pool list for direct Lunar League exploration.
+- `GET /TeamLeague/GetPoolTeamsAsync?poolId=...&language=en`, `GET /TeamLeague/GetTeamStandingsAsync?poolId=...&language=en` and `GET /TeamLeague/GetMatchesForPoolAsync?poolId=...&language=en` provide the teams, aggregate standings and fixtures for a selected pool.
 - `GET /TeamLeague/GetTeamLeagueTeamHomepageAsync?TeamId=...&Language=en` resolves the team's pool, while `GET /TeamLeague/GetTeamStandingsAsync?poolId=...&language=en` returns the current/final team standing and `GET /TeamLeague/GetTeamMatchesAsync?teamId=...&language=en` returns the season fixtures.
 - `GET /TeamLeague/GetMatchesForPoolAsync?poolId=...&language=en` returns every completed fixture in the pool, and `GET /TeamLeague/TeamLeagueTeamMatchStandingsAsync?teamMatchId=...&language=en` returns the aggregate contribution of both teams for one fixture. `GET /TeamLeague/GetStandingsRulesSettingsAsync?teamLeagueId=...&sport=...&language=en` returns the ordering rules used by the league table.
 - `GET /TeamLeague/GetTeamLeagueTeamsMatchesAsync?teamMatchId=...&language=en` returns the individual doubles inside a team fixture. The app filters those matches by the selected player's numeric ID.
@@ -25,7 +28,7 @@ The browser client uses the public base URL `https://api.rankedin.com/v1`. API a
 - `GET /Tournament/GetClassesAndDrawNamesAsync?tournamentId=...` and `GET /Tournament/GetMatchesSectionAsync?...` provide draw and match data for exploratory detail.
 - `GET /Player/GetLastEventsPlayedAsync?...` and `GET /Player/GetPlayerMatchesAsync?...` expose convenient recent-match/profile data, but neither returns the tournament class, final standing and field size needed for placement analysis. Keep using the event standings/results path for that insight.
 
-The implementation and endpoint-specific raw types live in [`src/lib/rankedin.ts`](../src/lib/rankedin.ts). Keep PascalCase API payloads and URL construction there; UI code should consume normalized domain types.
+The implementation and endpoint-specific raw types live in [`src/lib/rankedin.ts`](../src/lib/rankedin.ts). Keep PascalCase API payloads, URL construction and the mixed-case team-league search/fixture payloads there; UI code should consume normalized domain types.
 
 ## Interpretation rules
 
