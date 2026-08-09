@@ -789,11 +789,13 @@ type PlayerProgressWorkspaceProps = {
   isLoading: boolean
   loadingStage: 'profile' | 'history' | null
   onCopyShareLink: () => void
+  onPrintReport: () => void
   shareCopied: boolean
   canShare: boolean
+  canPrintReport: boolean
 }
 
-function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueError, isLoadingLeague, error, isLoading, loadingStage, onCopyShareLink, shareCopied, canShare }: PlayerProgressWorkspaceProps) {
+function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueError, isLoadingLeague, error, isLoading, loadingStage, onCopyShareLink, onPrintReport, shareCopied, canShare, canPrintReport }: PlayerProgressWorkspaceProps) {
   const series = useMemo(() => progressSeries(analysis?.events ?? []), [analysis])
   const points = useMemo(() => series.flatMap((item) => item.points), [series])
   const latestPoint = [...points].sort((first, second) => (
@@ -814,6 +816,9 @@ function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueErro
           <div className="workspace-actions">
             <button className="text-button share-button" type="button" onClick={onCopyShareLink} disabled={!canShare}>
               {shareCopied ? <Check size={15} /> : <Copy size={15} />} {shareCopied ? 'Link copied' : 'Copy share link'}
+            </button>
+            <button className="outline-button report-print-button" type="button" onClick={onPrintReport} disabled={!canPrintReport}>
+              <Printer size={14} /> Save PDF
             </button>
             <a className="outline-button" href={`https://www.rankedin.com${profile.url}`} target="_blank" rel="noreferrer">Open profile <ArrowUpRight size={15} /></a>
           </div>
@@ -1240,6 +1245,11 @@ function App() {
 
   function printTournamentReport() {
     if (!canExportTournament) return
+    window.print()
+  }
+
+  function printPlayerReport() {
+    if (!playerProfile) return
     window.print()
   }
 
@@ -1692,6 +1702,9 @@ function App() {
             <button className="text-button share-button" type="button" onClick={() => void copyShareLink()} disabled={!tournamentUrl.trim()}>
               {shareCopied ? <Check size={15} /> : <Copy size={15} />} {shareCopied ? 'Link copied' : 'Copy share link'}
             </button>
+            <button className="outline-button report-print-button" type="button" onClick={printTournamentReport} disabled={!canExportTournament}>
+              <Printer size={14} /> Save PDF
+            </button>
             <details className="export-menu">
               <summary className="outline-button export-menu-summary"><Download size={14} /> Export overview</summary>
               <div className="export-menu-panel" aria-label="Export tournament overview">
@@ -1930,8 +1943,10 @@ function App() {
             isLoading={isAnalyzingPlayer}
             loadingStage={playerLoadingStage}
             onCopyShareLink={() => void copyShareLink()}
+            onPrintReport={printPlayerReport}
             shareCopied={shareCopied}
             canShare={Boolean(playerProfile && playerReference.trim())}
+            canPrintReport={Boolean(playerProfile)}
           />
         )}
       </main>
