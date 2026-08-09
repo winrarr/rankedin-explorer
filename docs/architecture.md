@@ -24,7 +24,6 @@ src/lib/rankedin.ts  ── normalized domain types ──>  React view state
 - `src/hooks/usePublicSearch.ts` owns the shared debounce, timeout, cancellation and stale-response handling for tournament and player name searches.
 - `src/lib/preferences.ts` owns the deliberately narrow local persistence policy.
 - `src/App.tsx` owns the cross-screen interaction flow and temporary request state. Focused view pieces live in `src/components/`, while pure display transformations live in `src/lib/formatters.ts` and `src/lib/fieldBreakdown.ts`.
-- `src/lib/snapshots.ts` builds compressed, self-contained tournament snapshot URLs and restores them without Rankedin requests. Sharing tries the tokenless is.gd JSONP API and falls back to copying the full snapshot URL when the service cannot accept or create the link.
 - `src/components/MetricCard.tsx`, `src/components/CardHeading.tsx`, `src/components/RankedinLink.tsx`, `src/components/InfoTip.tsx` and `src/components/LoadingValue.tsx` are shared semantic display primitives. Domain-specific components compose them instead of duplicating their structure.
 - `src/App.css` owns the visual system and responsive layout. Avoid one-off positional fixes; use the existing grid, flex and card primitives.
 - `src/styles/theme.css` is the single source for the light/dark palette and chart colors.
@@ -40,7 +39,7 @@ src/lib/rankedin.ts  ── normalized domain types ──>  React view state
 5. For each event, locate the player's result by numeric participant ID across classes.
 6. For the field summary, select each player's newest `Type === 3` Lunar League event and resolve only its division name; older seasons and placement are excluded.
 7. Load matches for the matching class and normalize partners, opponents, scores and outcomes.
-8. When the user marks a selected pair as “us”, inspect up to five recent finished events from the first player's history, retain numeric opponent IDs, intersect them with the current class roster, deduplicate by match ID and show a compact preparation context. Shared snapshots do not include this match-detail payload.
+8. When the user marks a selected pair as “us”, inspect up to five recent finished events from the first player's history, retain numeric opponent IDs, intersect them with the current class roster, deduplicate by match ID and show a compact preparation context.
 
 ### Player Progress
 

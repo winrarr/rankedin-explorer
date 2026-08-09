@@ -9,7 +9,6 @@ type PairPreparationPanelProps = {
   context: PairPreparationContext | null
   isLoading: boolean
   error: string | null
-  isSnapshot: boolean
   requestedEvents: number
   failedEvents: number
 }
@@ -24,7 +23,7 @@ function meetingLabel(value: number) {
   return `${value} ${value === 1 ? 'meeting' : 'meetings'}`
 }
 
-export function PairPreparationPanel({ pair, context, isLoading, error, isSnapshot, requestedEvents, failedEvents }: PairPreparationPanelProps) {
+export function PairPreparationPanel({ pair, context, isLoading, error, requestedEvents, failedEvents }: PairPreparationPanelProps) {
   const hasResults = Boolean(context?.opponents.length)
 
   return (
@@ -40,10 +39,7 @@ export function PairPreparationPanel({ pair, context, isLoading, error, isSnapsh
         <div className="pair-preparation-status"><LoaderCircle className="spin" size={15} /> Reading recent match details…</div>
       )}
       {error && <div className="pair-preparation-status is-error"><CircleHelp size={15} /> {error}</div>}
-      {!isLoading && !error && isSnapshot && (
-        <div className="pair-preparation-status"><CircleHelp size={15} /> Shared snapshots do not include match details. Reopen the live tournament to check recurring opponents.</div>
-      )}
-      {!isLoading && !error && !isSnapshot && context && (
+      {!isLoading && !error && context && (
         <>
           <div className="pair-preparation-summary">
             <div><strong>{context.opponents.length}</strong><span>field opponents</span></div>
