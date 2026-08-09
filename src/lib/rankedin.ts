@@ -1922,15 +1922,26 @@ export async function getPlayerAnalysis(
   return { playerId, playerName: 'Selected player', events: analyses }
 }
 
-function latestLeagueEvent(events: RawEvent[]) {
-  return events
-    .filter((event) => event.Type === 3)
+function currentLeagueEvent(events: RawEvent[]) {
+  const leagueEvents = events.filter((event) => event.Type === 3)
+  const activeOrUpcoming = leagueEvents.filter((event) => event.State !== FINISHED_EVENT_STATE)
+  const now = Date.now()
+  const active = activeOrUpcoming
+    .filter((event) => parseRankedinDate(event.StartDate) <= now)
+    .sort((first, second) => parseRankedinDate(second.StartDate) - parseRankedinDate(first.StartDate))[0]
+  if (active) return active
+
+  const upcoming = activeOrUpcoming
+    .sort((first, second) => parseRankedinDate(first.StartDate) - parseRankedinDate(second.StartDate))[0]
+  if (upcoming) return upcoming
+
+  return leagueEvents
     .sort((first, second) => parseRankedinDate(second.StartDate) - parseRankedinDate(first.StartDate))[0]
 }
 
 export async function getPlayerCurrentLeagueDivision(playerId: number): Promise<PlayerLeagueDivision | null> {
   const events = await getPlayerParticipatedEvents(playerId)
-  const event = latestLeagueEvent(events)
+  const event = currentLeagueEvent(events)
   if (!event) return null
 
   const details = await request<RawLeagueTeamDetail[]>(
@@ -1944,9 +1955,9 @@ export async function getPlayerCurrentLeagueDivision(playerId: number): Promise<
   return divisionName ? { divisionName } : null
 }
 
-export async function getLatestPlayerLeague(playerId: number): Promise<PlayerLeagueReference | null> {
+export async function getCurrentPlayerLeague(playerId: number): Promise<PlayerLeagueReference | null> {
   const events = await getPlayerParticipatedEvents(playerId)
-  const event = latestLeagueEvent(events)
+  const event = currentLeagueEvent(events)
   if (!event) return null
 
   const details = await request<RawLeagueTeamDetail[]>(

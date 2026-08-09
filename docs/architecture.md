@@ -56,7 +56,7 @@ Both modes render incomplete records honestly rather than treating missing data 
 
 ### Lunar League Explorer
 
-1. Search public Lunar Leagues by name, URL or numeric ID, or search a player name to resolve that player’s latest public Lunar League and team before opening the league.
+1. Search public Lunar Leagues by name, URL or numeric ID, or search a player name to resolve that player’s current public Lunar League and team before opening the league.
 2. Load league metadata, public pool options and aggregate league totals.
 3. Select a pool, then load its teams, standings and fixtures in parallel.
 4. Show team membership and source links without loading individual doubles by default; detailed match payloads remain a later, explicit drill-down.

@@ -28,7 +28,7 @@ import {
 } from 'lucide-react'
 import {
   getClassParticipants,
-  getLatestPlayerLeague,
+  getCurrentPlayerLeague,
   getPlayerAnalysis,
   getPlayerCurrentLeagueDivision,
   getPlayerLeagueAnalysis,
@@ -1458,7 +1458,7 @@ function App() {
     setIsAnalyzingLeague(true)
 
     try {
-      const league = await getLatestPlayerLeague(player.id)
+      const league = await getCurrentPlayerLeague(player.id)
       if (requestId !== leagueRequestRef.current) return
       if (!league) {
         setLeagueError('No public Lunar League was found for ' + player.name + '. Try the league name or another player.')
@@ -2047,12 +2047,12 @@ function App() {
                     {!!leaguePlayerSearch.results.length && (
                       <>
                         <div className="search-section-label">FIND A LUNAR LEAGUE BY PLAYER</div>
-                        <p className="league-search-guidance">Search your name or a teammate to find their latest public Lunar League team.</p>
+                        <p className="league-search-guidance">Search your name or a teammate to find their current public Lunar League team.</p>
                         <div className="player-search-results" role="listbox" aria-label="Players with Lunar League history">
                           {leaguePlayerSearch.results.map((player) => (
                             <button className="player-search-result" type="button" role="option" key={player.rankedInId} onClick={() => void selectLeaguePlayerSearchResult(player)}>
                               <span className="player-search-result-name">{player.name}</span>
-                              <span className="player-search-result-id">Find latest Lunar League</span>
+                              <span className="player-search-result-id">Find current Lunar League</span>
                             </button>
                           ))}
                         </div>
@@ -2061,7 +2061,7 @@ function App() {
                   </div>
                 )}
               </div>
-              <p className="input-hint"><Info size={14} /> No login. No database. {activeMode === 'tournament' ? 'Paste a public tournament URL or ID to begin.' : activeMode === 'player' ? 'Type a name or paste a public profile URL/R-number.' : 'Search a league name, or search your player name to find your latest public Lunar League team.'}</p>
+              <p className="input-hint"><Info size={14} /> No login. No database. {activeMode === 'tournament' ? 'Paste a public tournament URL or ID to begin.' : activeMode === 'player' ? 'Type a name or paste a public profile URL/R-number.' : 'Search a league name, or search your player name to find your current public Lunar League team.'}</p>
               {((activeMode === 'tournament' && isAnalyzing) || (activeMode === 'player' && isAnalyzingPlayer && !playerProfile) || (activeMode === 'league' && isAnalyzingLeague && !leagueSnapshot)) && (
                 <div className="lookup-loading-state" role="status" aria-live="polite">
                   <LoaderCircle className="spin" size={16} />
