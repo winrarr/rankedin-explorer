@@ -20,6 +20,7 @@ These stories define the current product direction. The MVP is intentionally foc
 
 L1. As a user, I want to paste or search for a public Lunar League so that I can inspect a league without starting from a player.
 L2. As a user, I want to switch between Lunar League pools so that I can compare regions and divisions within the same season.
+L3. As a user, I want to search my player name or a teammate’s name so that the tool can find my latest public Lunar League team without requiring a league ID.
 
 ## Player history and strength
 

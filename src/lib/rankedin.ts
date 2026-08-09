@@ -197,6 +197,18 @@ export type PlayerLeagueDivision = {
   divisionName: string
 }
 
+export type PlayerLeagueReference = {
+  leagueId: number
+  leagueName: string
+  leagueUrl: string
+  startDate: string
+  teamId: number
+  teamName: string
+  teamUrl: string
+  divisionName: string
+  regionName: string
+}
+
 export type LeaguePool = {
   id: number
   name: string
@@ -1930,6 +1942,34 @@ export async function getPlayerCurrentLeagueDivision(playerId: number): Promise<
   )
   const divisionName = details.find((detail) => detail.divisionName?.trim())?.divisionName.trim()
   return divisionName ? { divisionName } : null
+}
+
+export async function getLatestPlayerLeague(playerId: number): Promise<PlayerLeagueReference | null> {
+  const events = await getPlayerParticipatedEvents(playerId)
+  const event = latestLeagueEvent(events)
+  if (!event) return null
+
+  const details = await request<RawLeagueTeamDetail[]>(
+    `/teamleague/GetTeamLeagueTeamDetailsAsync${query({
+      teamLeagueId: event.Id,
+      participantId: playerId,
+      language: 'en',
+    })}`,
+  )
+  const detail = details.find((item) => item.teamName?.trim() && item.teamUrl?.trim())
+  if (!detail) return null
+
+  return {
+    leagueId: event.Id,
+    leagueName: event.Name,
+    leagueUrl: `/en/teamleague/${event.Id}`,
+    startDate: event.StartDate,
+    teamId: detail.teamId,
+    teamName: detail.teamName,
+    teamUrl: detail.teamUrl,
+    divisionName: detail.divisionName,
+    regionName: detail.regionName,
+  }
 }
 
 export async function getPlayerLeagueAnalysis(

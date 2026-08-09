@@ -56,7 +56,7 @@ Both modes render incomplete records honestly rather than treating missing data 
 
 ### Lunar League Explorer
 
-1. Parse a public Lunar League URL or numeric league ID.
+1. Search public Lunar Leagues by name, URL or numeric ID, or search a player name to resolve that player’s latest public Lunar League and team before opening the league.
 2. Load league metadata, public pool options and aggregate league totals.
 3. Select a pool, then load its teams, standings and fixtures in parallel.
 4. Show team membership and source links without loading individual doubles by default; detailed match payloads remain a later, explicit drill-down.
@@ -70,6 +70,6 @@ Name searches are debounced before requesting the public API. Each search has an
 
 ### Report export
 
-Report exports are derived from the already-loaded normalized React state and make no additional Rankedin requests. Tournament and Player Progress views expose a direct Save PDF action that uses the browser's print flow and print media styles to omit app chrome. Tournament CSV contains one row per player with pair, ranking, skill, current Lunar League division and up to five recent results. Tournament JSON contains the normalized report, source links, raw class labels, current League divisions and explicit partial/complete data status. The app does not persist any of these reports; sharing a durable copy is done through a URL or a downloaded file.
+Report exports are derived from the already-loaded normalized React state and make no additional Rankedin requests. Tournament reports group PDF, CSV and JSON downloads under Save overview, while Player Progress exposes a direct Save PDF action; both use the browser's print flow and print media styles to omit app chrome. Tournament CSV contains one row per player with pair, ranking, skill, current Lunar League division and up to five recent results. Tournament JSON contains the normalized report, source links, raw class labels, current League divisions and explicit partial/complete data status. The app does not persist any of these reports; sharing a durable copy is done through a URL or a downloaded file.
 
 The API currently permits cross-origin browser requests from a GitHub Pages-style origin. This is an external deployment fact, not an application guarantee; if Rankedin changes its CORS policy, the project will need an explicitly approved proxy or server-backed architecture.

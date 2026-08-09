@@ -121,7 +121,7 @@ export function LeagueExplorer({ snapshot, isLoadingPool, onPoolChange, onCopySh
     <>
       <section className="workspace-heading">
         <div>
-          <div className="eyebrow">LEAGUE SNAPSHOT <span className="live-dot" /> LIVE DATA</div>
+          <div className="eyebrow">LUNAR LEAGUE SNAPSHOT <span className="live-dot" /> LIVE DATA</div>
           <h2>{snapshot.name}</h2>
           <p>{snapshot.location}, {snapshot.country} <span className="muted-divider">/</span> {snapshot.sport} <span className="muted-divider">/</span> {formatDate(snapshot.startDate)} – {formatDate(snapshot.endDate)}</p>
           <p className="print-report-meta">Lunar League overview · {pool?.name ?? 'No pool selected'} · Generated {formatDate(new Date().toISOString())} · rankedin.com{snapshot.eventUrl}</p>
@@ -130,7 +130,7 @@ export function LeagueExplorer({ snapshot, isLoadingPool, onPoolChange, onCopySh
           <button className="text-button share-button" type="button" onClick={onCopyShareLink} disabled={!canShare}>
             {shareCopied ? 'Link copied' : 'Copy share link'}
           </button>
-          <RankedinLink className="outline-button" path={snapshot.eventUrl} iconSize={15}>Open league</RankedinLink>
+          <RankedinLink className="outline-button" path={snapshot.eventUrl} iconSize={15}>Open Lunar League</RankedinLink>
         </div>
       </section>
 

@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import {
   getClassParticipants,
+  getLatestPlayerLeague,
   getPlayerAnalysis,
   getPlayerCurrentLeagueDivision,
   getPlayerLeagueAnalysis,
@@ -84,6 +85,7 @@ import {
 } from './lib/formatters'
 import { PlayerHistoryColumn } from './components/PlayerHistoryColumn'
 import { LeagueExplorer } from './components/LeagueExplorer'
+import { PairUsButton } from './components/PairUsButton'
 import { PairPreparationPanel } from './components/PairPreparationPanel'
 import { summarizeFieldOpponents, type PairPreparationContext } from './lib/opponentContext'
 import { usePublicSearch } from './hooks/usePublicSearch'
@@ -102,6 +104,10 @@ type PairPreparationState = {
   context: PairPreparationContext
   requestedEvents: number
   failedEvents: number
+}
+type PairHistoryState = {
+  first: { analysis: PlayerAnalysis | null; error: string | null }
+  second: { analysis: PlayerAnalysis | null; error: string | null }
 }
 
 type SharedLocation = {
@@ -1081,10 +1087,7 @@ function App() {
   const [pairPreparation, setPairPreparation] = useState<PairPreparationState | null>(null)
   const [isLoadingPairPreparation, setIsLoadingPairPreparation] = useState(false)
   const [pairPreparationError, setPairPreparationError] = useState<string | null>(null)
-  const [pairHistory, setPairHistory] = useState<{
-    first: { analysis: PlayerAnalysis | null; error: string | null }
-    second: { analysis: PlayerAnalysis | null; error: string | null }
-  } | null>(null)
+  const [pairHistory, setPairHistory] = useState<PairHistoryState | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isLoadingClass, setIsLoadingClass] = useState(false)
@@ -1131,6 +1134,12 @@ function App() {
     term: leagueReference,
     label: 'League',
     search: searchTeamLeaguesByName,
+  })
+  const leaguePlayerSearch = usePublicSearch({
+    enabled: activeMode === 'league' && showLeagueSearch && !isDirectLeagueReference(leagueReference),
+    term: leagueReference,
+    label: 'Player',
+    search: searchPlayersByName,
   })
 
   useEffect(() => {
@@ -1439,6 +1448,32 @@ function App() {
     void analyzeLeague(String(league.id))
   }
 
+  async function selectLeaguePlayerSearchResult(player: PlayerSearchResult) {
+    const requestId = leagueRequestRef.current + 1
+    leagueRequestRef.current = requestId
+    setShowLeagueSearch(false)
+    setLeagueReference(player.name)
+    setLeagueSnapshot(null)
+    setLeagueError(null)
+    setIsAnalyzingLeague(true)
+
+    try {
+      const league = await getLatestPlayerLeague(player.id)
+      if (requestId !== leagueRequestRef.current) return
+      if (!league) {
+        setLeagueError('No public Lunar League was found for ' + player.name + '. Try the league name or another player.')
+        setIsAnalyzingLeague(false)
+        return
+      }
+      setLeagueReference(String(league.leagueId))
+      await analyzeLeague(String(league.leagueId))
+    } catch (caught) {
+      if (requestId !== leagueRequestRef.current) return
+      setLeagueError(caught instanceof Error ? caught.message : 'The player’s Lunar League could not be found.')
+      setIsAnalyzingLeague(false)
+    }
+  }
+
   function clearReference() {
     if (activeMode === 'tournament') {
       setTournamentUrl('')
@@ -1546,7 +1581,7 @@ function App() {
     }
   }
 
-  async function inspectPair(pair: PairRecord) {
+  async function inspectPair(pair: PairRecord): Promise<PairHistoryState> {
     setSelectedPairId(pair.id)
     setPairHistory(null)
     if (pair.id !== usPairId) {
@@ -1561,15 +1596,17 @@ function App() {
     ])
 
     const [firstResult, secondResult] = results
-    setPairHistory({
+    const nextPairHistory: PairHistoryState = {
       first: firstResult.status === 'fulfilled'
         ? { analysis: { ...firstResult.value, playerName: pair.first.name }, error: null }
         : { analysis: null, error: firstResult.reason instanceof Error ? firstResult.reason.message : 'Player history could not be loaded.' },
       second: secondResult.status === 'fulfilled'
         ? { analysis: { ...secondResult.value, playerName: pair.second.name }, error: null }
         : { analysis: null, error: secondResult.reason instanceof Error ? secondResult.reason.message : 'Player history could not be loaded.' },
-    })
+    }
+    setPairHistory(nextPairHistory)
     setIsLoadingPair(false)
+    return nextPairHistory
   }
 
   async function setPairAsUs(pair: PairRecord) {
@@ -1580,15 +1617,19 @@ function App() {
     setUsPairId(pair.id)
     setPairPreparation(null)
     setPairPreparationError(null)
-
-    const analysis = pairHistory?.first.analysis
-    if (!analysis || analysis.playerId !== pair.first.id) {
-      setPairPreparationError('Load this pair history before checking recent opponents.')
-      return
-    }
-
     setIsLoadingPairPreparation(true)
+
     try {
+      let analysis = pairHistory?.first.analysis
+      if (!analysis || analysis.playerId !== pair.first.id) {
+        const loadedPairHistory = await inspectPair(pair)
+        if (requestId !== pairPreparationRequestRef.current) return
+        analysis = loadedPairHistory.first.analysis
+      }
+      if (!analysis || analysis.playerId !== pair.first.id) {
+        setPairPreparationError('This pair’s recent history could not be loaded.')
+        return
+      }
       const recentMatches = await getRecentPlayerMatches(analysis, 5)
       if (requestId !== pairPreparationRequestRef.current) return
       setPairPreparation({
@@ -1895,7 +1936,7 @@ function App() {
               aria-selected={activeMode === 'league'}
               onClick={() => switchMode('league')}
             >
-              <GitBranch size={15} /> League Explorer
+              <GitBranch size={15} /> Lunar League Explorer
             </button>
           </div>
         </div>
@@ -1943,7 +1984,7 @@ function App() {
                           void (activeMode === 'tournament' ? analyzeTournament() : activeMode === 'player' ? analyzePlayer() : analyzeLeague())
                         }
                       }}
-                      placeholder={activeMode === 'tournament' ? 'Search tournament name, URL or ID' : activeMode === 'player' ? 'Search player name, profile URL or R-number' : 'Search Lunar League name, URL or ID'}
+                      placeholder={activeMode === 'tournament' ? 'Search tournament name, URL or ID' : activeMode === 'player' ? 'Search player name, profile URL or R-number' : 'Search Lunar League or player name'}
                     />
                     {(activeMode === 'tournament' ? tournamentUrl : activeMode === 'player' ? playerReference : leagueReference) && <button className="clear-input" type="button" aria-label={`Clear ${activeMode} reference`} onClick={clearReference}><X size={14} /></button>}
                   </div>
@@ -1988,9 +2029,11 @@ function App() {
                 )}
                 {activeMode === 'league' && showLeagueSearch && !isDirectLeagueReference(leagueReference) && (
                   <div className="tournament-search-panel" role="status">
-                    {leagueSearch.isSearching && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching public Rankedin leagues…</p>}
+                    {leagueSearch.isSearching && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching Lunar Leagues…</p>}
                     {leagueSearch.error && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {leagueSearch.error}</p>}
-                    {!leagueSearch.isSearching && !leagueSearch.error && leagueReference.trim().length >= 2 && !leagueSearch.results.length && <p className="player-search-status">No public Lunar Leagues matched that name.</p>}
+                    {leaguePlayerSearch.isSearching && <p className="player-search-status"><LoaderCircle className="spin" size={13} /> Searching player names…</p>}
+                    {leaguePlayerSearch.error && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {leaguePlayerSearch.error}</p>}
+                    {!leagueSearch.isSearching && !leagueSearch.error && !leaguePlayerSearch.isSearching && !leaguePlayerSearch.results.length && leagueReference.trim().length >= 2 && !leagueSearch.results.length && <p className="player-search-status">No public Lunar Leagues matched that name.</p>}
                     {!!leagueSearch.results.length && (
                       <div className="tournament-search-results" role="listbox" aria-label="Lunar League search results">
                         {leagueSearch.results.map((league) => (
@@ -2001,10 +2044,24 @@ function App() {
                         ))}
                       </div>
                     )}
+                    {!!leaguePlayerSearch.results.length && (
+                      <>
+                        <div className="search-section-label">FIND A LUNAR LEAGUE BY PLAYER</div>
+                        <p className="league-search-guidance">Search your name or a teammate to find their latest public Lunar League team.</p>
+                        <div className="player-search-results" role="listbox" aria-label="Players with Lunar League history">
+                          {leaguePlayerSearch.results.map((player) => (
+                            <button className="player-search-result" type="button" role="option" key={player.rankedInId} onClick={() => void selectLeaguePlayerSearchResult(player)}>
+                              <span className="player-search-result-name">{player.name}</span>
+                              <span className="player-search-result-id">Find latest Lunar League</span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
-              <p className="input-hint"><Info size={14} /> No login. No database. {activeMode === 'tournament' ? 'Paste a public tournament URL or ID to begin.' : activeMode === 'player' ? 'Type a name or paste a public profile URL/R-number.' : 'Type a league name or paste a public Lunar League URL/ID.'}</p>
+              <p className="input-hint"><Info size={14} /> No login. No database. {activeMode === 'tournament' ? 'Paste a public tournament URL or ID to begin.' : activeMode === 'player' ? 'Type a name or paste a public profile URL/R-number.' : 'Search a league name, or search your player name to find your latest public Lunar League team.'}</p>
               {((activeMode === 'tournament' && isAnalyzing) || (activeMode === 'player' && isAnalyzingPlayer && !playerProfile) || (activeMode === 'league' && isAnalyzingLeague && !leagueSnapshot)) && (
                 <div className="lookup-loading-state" role="status" aria-live="polite">
                   <LoaderCircle className="spin" size={16} />
@@ -2036,11 +2093,8 @@ function App() {
             <button className="text-button share-button" type="button" onClick={() => void copyShareLink()} disabled={!tournamentUrl.trim()}>
               {shareCopied ? <Check size={15} /> : <Copy size={15} />} {shareCopied ? 'Link copied' : 'Copy share link'}
             </button>
-            <button className="outline-button report-print-button" type="button" onClick={printTournamentReport} disabled={!canExportTournament}>
-              <Printer size={14} /> Save PDF
-            </button>
             <details className="export-menu">
-              <summary className="outline-button export-menu-summary"><Download size={14} /> Export overview</summary>
+              <summary className="outline-button export-menu-summary"><Download size={14} /> Save overview</summary>
               <div className="export-menu-panel" aria-label="Export tournament overview">
                 <button className="export-menu-item" type="button" onClick={printTournamentReport} disabled={!canExportTournament}>
                   <Printer size={14} /> Print / save PDF
@@ -2181,7 +2235,13 @@ function App() {
                             <div>
                               <strong>{pair.first.name}</strong>
                               <span>{pair.second.name}</span>
-                              {pair.id === usPairId && <span className="pair-us-badge">US</span>}
+                              <PairUsButton
+                                pair={pair}
+                                selected={pair.id === usPairId}
+                                isLoading={isLoadingPairPreparation && pair.id === usPairId}
+                                disabled={isLoadingPairPreparation || (selected && isLoadingPair && !pairHistory?.first.analysis)}
+                                onToggle={() => pair.id === usPairId ? clearUsPair() : void setPairAsUs(pair)}
+                              />
                             </div>
                           </div>
                         </td>
@@ -2242,16 +2302,13 @@ function App() {
                 <p>Placements come first. Open a tournament when you want the match-by-match context.</p>
               </div>
               <div className="pair-history-actions">
-                <button
-                  className={`us-select-button${usPairId === selectedPair.id ? ' is-selected' : ''}`}
-                  type="button"
-                  aria-pressed={usPairId === selectedPair.id}
-                  onClick={() => usPairId === selectedPair.id ? clearUsPair() : void setPairAsUs(selectedPair)}
+                <PairUsButton
+                  pair={selectedPair}
+                  selected={usPairId === selectedPair.id}
+                  isLoading={isLoadingPairPreparation && usPairId === selectedPair.id}
                   disabled={isLoadingPairPreparation || (!pairHistory?.first.analysis && isLoadingPair)}
-                >
-                  {isLoadingPairPreparation && usPairId === selectedPair.id ? <LoaderCircle className="spin" size={13} /> : null}
-                  {usPairId === selectedPair.id ? 'Us selected' : 'Set as us'}
-                </button>
+                  onToggle={() => usPairId === selectedPair.id ? clearUsPair() : void setPairAsUs(selectedPair)}
+                />
                 <button className="icon-button quiet" type="button" onClick={() => { setSelectedPairId(null); setPairHistory(null) }} aria-label="Close pair history"><X size={17} /></button>
               </div>
             </div>
