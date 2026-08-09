@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import {
-  ArrowUpRight,
   CircleHelp,
   LoaderCircle,
   Search,
@@ -26,6 +25,7 @@ import {
   placementField,
   placementPosition,
 } from '../lib/formatters'
+import { RankedinLink } from './RankedinLink'
 
 type PlayerHistoryColumnProps = {
   player: PlayerRecord
@@ -140,15 +140,12 @@ export function PlayerHistoryColumn({
           <strong>{player.name}</strong>
           <span>Rating at target event: {formatRating(player.rating)}</span>
         </div>
-        <a
+        <RankedinLink
           className="player-profile-link"
-          href={'https://www.rankedin.com' + player.url}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={'Open ' + player.name + ' on Rankedin'}
-        >
-          <ArrowUpRight size={15} />
-        </a>
+          path={player.url}
+          iconSize={15}
+          ariaLabel={'Open ' + player.name + ' on Rankedin'}
+        />
       </div>
 
       {isLoading && (

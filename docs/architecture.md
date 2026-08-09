@@ -24,6 +24,7 @@ src/lib/rankedin.ts  ── normalized domain types ──>  React view state
 - `src/hooks/usePublicSearch.ts` owns the shared debounce, timeout, cancellation and stale-response handling for tournament and player name searches.
 - `src/lib/preferences.ts` owns the deliberately narrow local persistence policy.
 - `src/App.tsx` owns the cross-screen interaction flow and temporary request state. Focused view pieces live in `src/components/`, while pure display transformations live in `src/lib/formatters.ts` and `src/lib/fieldBreakdown.ts`.
+- `src/components/MetricCard.tsx`, `src/components/CardHeading.tsx`, `src/components/RankedinLink.tsx`, `src/components/InfoTip.tsx` and `src/components/LoadingValue.tsx` are shared semantic display primitives. Domain-specific components compose them instead of duplicating their structure.
 - `src/App.css` owns the visual system and responsive layout. Avoid one-off positional fixes; use the existing grid, flex and card primitives.
 - `src/styles/theme.css` is the single source for the light/dark palette and chart colors.
 

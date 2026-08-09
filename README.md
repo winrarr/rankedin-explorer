@@ -35,3 +35,5 @@ Exports are intentional one-time browser downloads: generating a PDF, CSV or JSO
 The repository includes a GitHub Actions workflow for GitHub Pages. Enable Pages for the repository and select **GitHub Actions** as the source. Pushes to `main` trigger the deployment workflow. The Vite build uses relative asset paths so it works under a project-page URL.
 
 See [`AGENTS.md`](./AGENTS.md) for the canonical project operating guide and [`docs/architecture.md`](./docs/architecture.md) for the current data flow.
+
+Visual changes should follow [`docs/design-system.md`](./docs/design-system.md), which documents the palette, layout language, responsive behavior and shared UI primitives.

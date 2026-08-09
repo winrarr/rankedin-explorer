@@ -48,5 +48,8 @@ The GitHub Pages workflow in `.github/workflows/deploy.yml` deploys pushes to `m
 - `docs/decisions/` — accepted consequential alternatives.
 - `docs/progress-visualization.md` — discovery research and user stories for the next single-player feature; the graph is not implemented yet.
 - `docs/user-stories.md` — broader product scope.
+- `docs/design-system.md` — canonical visual language, responsive rules and reusable UI component guidance.
+
+For visual work, read `docs/design-system.md` before changing JSX or CSS. Keep palette tokens in `src/styles/theme.css`, shared layout and component rules in `src/App.css`, and reusable semantic primitives in `src/components/`. Prefer the existing primitives over new one-off markup; extract a component when the same semantic structure has at least two real uses.
 
 Keep implementation detail in code and tests. Update these documents when their subject changes; update this file when commands, boundaries or routing change.

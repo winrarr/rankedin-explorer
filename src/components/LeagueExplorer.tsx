@@ -1,7 +1,9 @@
-import { ArrowUpRight, CalendarDays, CircleHelp, GitBranch, LoaderCircle, Trophy, Users } from 'lucide-react'
+import { CalendarDays, CircleHelp, GitBranch, LoaderCircle, Trophy, Users } from 'lucide-react'
 import type { LeagueFixture, LeagueSnapshot, LeagueStanding } from '../lib/rankedin'
 import { formatCompactDate, formatDate, ordinalPosition } from '../lib/formatters'
+import { CardHeading } from './CardHeading'
 import { MetricCard } from './MetricCard'
+import { RankedinLink } from './RankedinLink'
 
 type LeagueExplorerProps = {
   snapshot: LeagueSnapshot
@@ -10,10 +12,6 @@ type LeagueExplorerProps = {
   onCopyShareLink: () => void
   shareCopied: boolean
   canShare: boolean
-}
-
-function teamLink(url: string) {
-  return `https://www.rankedin.com${url}`
 }
 
 function fixtureResult(fixture: LeagueFixture) {
@@ -48,9 +46,9 @@ function LeagueStandingTable({ snapshot }: { snapshot: LeagueSnapshot }) {
             <tr key={`${standing.teamId}-${standing.teamName}`}>
               <td><strong className={standing.standing === 1 ? 'league-rank-highlight' : ''}>{ordinalPosition(standing.standing)}</strong></td>
               <td>
-                <a className="league-table-team" href={teamLink(standing.teamUrl)} target="_blank" rel="noreferrer">
-                  <strong>{standing.teamName}</strong><ArrowUpRight size={12} />
-                </a>
+                <RankedinLink className="league-table-team" path={standing.teamUrl} iconSize={12}>
+                  <strong>{standing.teamName}</strong>
+                </RankedinLink>
               </td>
               <td>{standing.wins}–{standing.losses}{standing.draws ? `–${standing.draws}` : ''}</td>
               <td><strong>{standing.matchPoints}</strong></td>
@@ -77,7 +75,7 @@ function LeagueFixtureList({ snapshot }: { snapshot: LeagueSnapshot }) {
             </div>
             <span>{fixture.round ? `Round ${fixture.round}` : 'Round unavailable'} · {fixture.showResults ? `${fixture.team1.score ?? '—'}–${fixture.team2.score ?? '—'}` : 'Result not published'}</span>
           </div>
-          <a className="league-fixture-source" href={teamLink(fixture.url)} target="_blank" rel="noreferrer" aria-label={`Open fixture ${fixture.id} on Rankedin`}><ArrowUpRight size={14} /></a>
+          <RankedinLink className="league-fixture-source" path={fixture.url} iconSize={14} ariaLabel={`Open fixture ${fixture.id} on Rankedin`} />
         </article>
       ))}
       {!snapshot.fixtures.length && <p className="empty-history">No public fixtures are available for this pool yet.</p>}
@@ -94,16 +92,16 @@ function LeagueTeamGrid({ snapshot }: { snapshot: LeagueSnapshot }) {
           <article className="league-explorer-team-card" key={team.id}>
             <div className="league-explorer-team-heading">
               <div>
-                <a href={teamLink(team.teamUrl)} target="_blank" rel="noreferrer"><strong>{team.name}</strong> <ArrowUpRight size={12} /></a>
+                <RankedinLink path={team.teamUrl} iconSize={12}><strong>{team.name}</strong></RankedinLink>
                 <span>{team.homeClubName || 'Club unavailable'}</span>
               </div>
               {standing && <b>{ordinalPosition(standing.standing)} <small>/ {snapshot.standings.length}</small></b>}
             </div>
             <div className="league-explorer-team-players">
               {team.players.map((player) => (
-                <a href={teamLink(player.url)} target="_blank" rel="noreferrer" key={player.url}>
+                <RankedinLink path={player.url} showIcon={false} key={player.url}>
                   <span>{player.name}</span>{player.isCaptain && <small>captain</small>}
-                </a>
+                </RankedinLink>
               ))}
               {!team.players.length && <span className="muted">No public players listed.</span>}
             </div>
@@ -132,7 +130,7 @@ export function LeagueExplorer({ snapshot, isLoadingPool, onPoolChange, onCopySh
           <button className="text-button share-button" type="button" onClick={onCopyShareLink} disabled={!canShare}>
             {shareCopied ? 'Link copied' : 'Copy share link'}
           </button>
-          <a className="outline-button" href={teamLink(snapshot.eventUrl)} target="_blank" rel="noreferrer">Open league <ArrowUpRight size={15} /></a>
+          <RankedinLink className="outline-button" path={snapshot.eventUrl} iconSize={15}>Open league</RankedinLink>
         </div>
       </section>
 
@@ -166,26 +164,17 @@ export function LeagueExplorer({ snapshot, isLoadingPool, onPoolChange, onCopySh
         <>
           <section className="dashboard-grid league-explorer-grid">
             <div className="field-card">
-              <div className="card-heading">
-                <div><div className="section-kicker">TABLE</div><h2>Pool standings</h2><p>Rankedin’s current or final ordering for this pool.</p></div>
-                <Trophy size={18} className="card-heading-icon" />
-              </div>
+              <CardHeading kicker="TABLE" title="Pool standings" description="Rankedin’s current or final ordering for this pool." icon={<Trophy size={18} className="card-heading-icon" />} />
               <LeagueStandingTable snapshot={snapshot} />
             </div>
             <div className="field-card">
-              <div className="card-heading">
-                <div><div className="section-kicker">FIXTURES</div><h2>Pool schedule</h2><p>Team matches in chronological order.</p></div>
-                <CalendarDays size={18} className="card-heading-icon" />
-              </div>
+              <CardHeading kicker="FIXTURES" title="Pool schedule" description="Team matches in chronological order." icon={<CalendarDays size={18} className="card-heading-icon" />} />
               <LeagueFixtureList snapshot={snapshot} />
             </div>
           </section>
 
           <section className="field-card league-teams-card">
-            <div className="card-heading">
-              <div><div className="section-kicker">TEAMS AND PLAYERS</div><h2>Who is in this pool?</h2><p>Team membership is public context. Open a player or team for the source profile.</p></div>
-              <Users size={18} className="card-heading-icon" />
-            </div>
+            <CardHeading kicker="TEAMS AND PLAYERS" title="Who is in this pool?" description="Team membership is public context. Open a player or team for the source profile." icon={<Users size={18} className="card-heading-icon" />} />
             <LeagueTeamGrid snapshot={snapshot} />
           </section>
         </>
