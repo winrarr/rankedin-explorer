@@ -7,7 +7,7 @@ Rankedin Explorer is a personal, read-only GitHub Pages tool for exploring the c
 - How far did they get, who did they play and what were the scores?
 - How does the current field compare by historical skill rating?
 
-The first version supports two temporary analysis modes: tournament field exploration with class switching, player filtering and pair history; and single-player progress with a level/class placement timeline and source-linked results. Player Progress also includes public name search, and live analyses can be reopened or shared through query-string URLs. Tournament Explorer can print/save a human-readable PDF report or download CSV/JSON exports from the data already loaded on the page. It uses Rankedin's public API directly from the browser and does not require an account, backend or database.
+The current version supports three temporary analysis modes: tournament field exploration with class switching, player filtering and pair history; single-player progress with a level/class placement timeline and source-linked results; and current-season Lunar League exploration with public pool, team, standings and fixture context when Rankedin has published it. Player Progress and Lunar League Explorer include public name search, and live analyses can be reopened or shared through query-string URLs. Tournament Explorer can print/save a human-readable PDF report or download CSV/JSON exports from the data already loaded on the page. It uses Rankedin's public API directly from the browser and does not require an account, backend or database.
 
 ## Run locally
 
@@ -35,5 +35,7 @@ Exports are intentional one-time browser downloads: generating a PDF, CSV or JSO
 The repository includes a GitHub Actions workflow for GitHub Pages. Enable Pages for the repository and select **GitHub Actions** as the source. Pushes to `main` trigger the deployment workflow. The Vite build uses relative asset paths so it works under a project-page URL.
 
 See [`AGENTS.md`](./AGENTS.md) for the canonical project operating guide and [`docs/architecture.md`](./docs/architecture.md) for the current data flow.
+
+Planned product outcomes are tracked in [`docs/backlog.md`](./docs/backlog.md); broader product stories live in [`docs/user-stories.md`](./docs/user-stories.md).
 
 Visual changes should follow [`docs/design-system.md`](./docs/design-system.md), which documents the palette, layout language, responsive behavior and shared UI primitives.

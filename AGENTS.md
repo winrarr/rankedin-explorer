@@ -1,6 +1,6 @@
 # Rankedin Explorer
 
-Rankedin Explorer is a read-only React/Vite site for making public Rankedin tournament, player and match data easier to compare. The first vertical slice analyzes a tournament field, loads class participants, and traces a selected player through finished events.
+Rankedin Explorer is a read-only React/Vite site for comparing public Rankedin tournament, player and Lunar League data. Its current modes cover tournament field exploration, single-player progress and current-season Lunar League exploration, with match and preparation context where the public API supports it.
 
 ## Repository map
 
@@ -48,6 +48,7 @@ The GitHub Pages workflow in `.github/workflows/deploy.yml` deploys pushes to `m
 - `docs/decisions/` — accepted consequential alternatives.
 - `docs/progress-visualization.md` — discovery research and user stories for the next single-player feature; the graph is not implemented yet.
 - `docs/user-stories.md` — broader product scope.
+- `docs/backlog.md` — planned product outcomes with rationale, constraints and verifiable acceptance criteria.
 - `docs/design-system.md` — canonical visual language, responsive rules and reusable UI component guidance.
 
 For visual work, read `docs/design-system.md` before changing JSX or CSS. Keep palette tokens in `src/styles/theme.css`, shared layout and component rules in `src/App.css`, and reusable semantic primitives in `src/components/`. Prefer the existing primitives over new one-off markup; extract a component when the same semantic structure has at least two real uses.

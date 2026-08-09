@@ -22,6 +22,16 @@ L1. As a user, I want to paste or search for a public Lunar League so that I can
 L2. As a user, I want to switch between Lunar League pools so that I can compare regions and divisions within the same season.
 L3. As a user, I want to search my player name or a teammate’s name so that the tool can find my current public Lunar League team without requiring a league ID.
 
+### Historical Lunar League seasons — backlog
+
+These stories are intentionally deferred. The current season remains the default experience until historical browsing is implemented.
+
+L4. As a user, I want to open prior public Lunar League seasons for my current player or team so that I can understand what changed over time.
+L5. As a user, I want current and historical Lunar League seasons to be clearly labeled so that I do not confuse active context with finished results.
+L6. As a user, I want to inspect the team, division, region, pool, standings and fixtures for a selected historic season so that I can review the context that existed at that time.
+L7. As a user, I want unavailable or unpublished historic data explained clearly so that missing information is not mistaken for a zero result or an empty season.
+L8. As a user, I want to reopen a selected historic season from a shared URL so that I can return to the same context without an account or saved profile.
+
 ## Player history and strength
 
 12. As a user, I want to select any player from a tournament roster.
