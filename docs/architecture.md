@@ -40,6 +40,7 @@ src/lib/rankedin.ts  ── normalized domain types ──>  React view state
 5. For each event, locate the player's result by numeric participant ID across classes.
 6. For the field summary, select each player's newest `Type === 3` Lunar League event and resolve only its division name; older seasons and placement are excluded.
 7. Load matches for the matching class and normalize partners, opponents, scores and outcomes.
+8. When the user marks a selected pair as “us”, inspect up to five recent finished events from the first player's history, retain numeric opponent IDs, intersect them with the current class roster, deduplicate by match ID and show a compact preparation context. Shared snapshots do not include this match-detail payload.
 
 ### Player Progress
 

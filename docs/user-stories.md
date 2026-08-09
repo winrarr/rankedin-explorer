@@ -44,6 +44,8 @@ L2. As a user, I want to switch between Lunar League pools so that I can compare
 27. As a user, I want to compare two or more players side by side.
 28. As a user, I want to compare pairs or teams rather than only individuals.
 29. As a user, I want to compare recent form separately from long-term history.
+T1. As a user, I want to mark the pair representing us after loading a tournament so that preparation context is anchored to the right players.
+T2. As a user, I want to see recurring opponents from the current field, with meetings and recent results, so that I can prepare without scanning every history manually.
 30. As a user, I want to identify unusually strong participants using multiple signals.
 31. As a user, I want to compare a player across different class levels.
 32. As a user, I want to inspect head-to-head history when available.
@@ -93,4 +95,4 @@ P15. As a player, I want class labels normalized for grouping while retaining th
 
 ## MVP selection
 
-The first release targets stories 1, 3–8, 12–24, 27, 29, 36, 43–47 and 49. The remaining stories are intentionally retained as product direction, not promises for the first release.
+The first release targets stories 1, 3–8, 12–24, 27, 29, 36, 43–47, 49 and T1–T2. The remaining stories are intentionally retained as product direction, not promises for the first release.

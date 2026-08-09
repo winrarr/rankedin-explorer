@@ -32,6 +32,7 @@ import {
   getPlayerCurrentLeagueDivision,
   getPlayerLeagueAnalysis,
   getPlayerProfile,
+  getRecentPlayerMatches,
   getLeagueSnapshot,
   normalizeCompetitionClassName,
   searchTeamLeaguesByName,
@@ -83,6 +84,8 @@ import {
 } from './lib/formatters'
 import { PlayerHistoryColumn } from './components/PlayerHistoryColumn'
 import { LeagueExplorer } from './components/LeagueExplorer'
+import { PairPreparationPanel } from './components/PairPreparationPanel'
+import { summarizeFieldOpponents, type PairPreparationContext } from './lib/opponentContext'
 import { usePublicSearch } from './hooks/usePublicSearch'
 import {
   downloadTournamentCsv,
@@ -104,6 +107,11 @@ const FIELD_LEAGUE_CONCURRENCY = 6
 
 type WorkspaceMode = 'tournament' | 'player' | 'league'
 type SnapshotShareState = 'idle' | 'creating' | 'copied' | 'fallback'
+type PairPreparationState = {
+  context: PairPreparationContext
+  requestedEvents: number
+  failedEvents: number
+}
 
 type SharedLocation = {
   mode: WorkspaceMode
@@ -1082,6 +1090,10 @@ function App() {
   const [isLoadingLeaguePool, setIsLoadingLeaguePool] = useState(false)
   const [leagueError, setLeagueError] = useState<string | null>(null)
   const [selectedPairId, setSelectedPairId] = useState<string | null>(null)
+  const [usPairId, setUsPairId] = useState<string | null>(null)
+  const [pairPreparation, setPairPreparation] = useState<PairPreparationState | null>(null)
+  const [isLoadingPairPreparation, setIsLoadingPairPreparation] = useState(false)
+  const [pairPreparationError, setPairPreparationError] = useState<string | null>(null)
   const [pairHistory, setPairHistory] = useState<{
     first: { analysis: PlayerAnalysis | null; error: string | null }
     second: { analysis: PlayerAnalysis | null; error: string | null }
@@ -1108,6 +1120,7 @@ function App() {
   const tournamentRequestRef = useRef(0)
   const playerRequestRef = useRef(0)
   const leagueRequestRef = useRef(0)
+  const pairPreparationRequestRef = useRef(0)
   const lastAnalyzedTournamentReferenceRef = useRef('')
   const lastAnalyzedPlayerReferenceRef = useRef('')
   const lastAnalyzedLeagueReferenceRef = useRef('')
@@ -1276,6 +1289,14 @@ function App() {
     }
   }
 
+  function clearPairPreparation() {
+    pairPreparationRequestRef.current += 1
+    setUsPairId(null)
+    setPairPreparation(null)
+    setIsLoadingPairPreparation(false)
+    setPairPreparationError(null)
+  }
+
   async function restoreSharedSnapshot(payload: string) {
     try {
       const report = await decodeTournamentSnapshot(payload)
@@ -1289,6 +1310,7 @@ function App() {
       setIsAnalyzing(false)
       setSelectedPairId(null)
       setPairHistory(null)
+      clearPairPreparation()
       setFieldPlacementSummaries(restored.fieldPlacementSummaries)
       setFieldPlacementsLoaded(restored.fieldPlacementsLoaded)
       setFieldPlacementError(null)
@@ -1322,6 +1344,7 @@ function App() {
     setSnapshotShareState('idle')
     setSelectedPairId(null)
     setPairHistory(null)
+    clearPairPreparation()
     setFieldPlacementSummaries({})
     setFieldPlacementsLoaded(false)
     setFieldPlacementError(null)
@@ -1592,6 +1615,7 @@ function App() {
       setSnapshot((current) => current ? ({ ...current, selectedClass: nextClass, participants }) : current)
       setSelectedPairId(null)
       setPairHistory(null)
+      clearPairPreparation()
       setFieldPlacementSummaries({})
       setFieldPlacementsLoaded(false)
       setFieldPlacementError(null)
@@ -1611,6 +1635,10 @@ function App() {
   async function inspectPair(pair: PairRecord) {
     setSelectedPairId(pair.id)
     setPairHistory(null)
+    if (pair.id !== usPairId) {
+      setPairPreparation(null)
+      setPairPreparationError(null)
+    }
     setIsLoadingPair(true)
 
     const results = await Promise.allSettled([
@@ -1628,6 +1656,44 @@ function App() {
         : { analysis: null, error: secondResult.reason instanceof Error ? secondResult.reason.message : 'Player history could not be loaded.' },
     })
     setIsLoadingPair(false)
+  }
+
+  async function setPairAsUs(pair: PairRecord) {
+    if (!snapshot || isLoadingPairPreparation) return
+
+    const requestId = pairPreparationRequestRef.current + 1
+    pairPreparationRequestRef.current = requestId
+    setUsPairId(pair.id)
+    setPairPreparation(null)
+    setPairPreparationError(null)
+
+    if (isViewingSnapshot) return
+
+    const analysis = pairHistory?.first.analysis
+    if (!analysis || analysis.playerId !== pair.first.id) {
+      setPairPreparationError('Load this pair history before checking recent opponents.')
+      return
+    }
+
+    setIsLoadingPairPreparation(true)
+    try {
+      const recentMatches = await getRecentPlayerMatches(analysis, 5)
+      if (requestId !== pairPreparationRequestRef.current) return
+      setPairPreparation({
+        context: summarizeFieldOpponents(recentMatches.matches, snapshot.participants, pair),
+        requestedEvents: recentMatches.requestedEvents,
+        failedEvents: recentMatches.failedEvents,
+      })
+    } catch (caught) {
+      if (requestId !== pairPreparationRequestRef.current) return
+      setPairPreparationError(caught instanceof Error ? caught.message : 'Recent opponents could not be loaded.')
+    } finally {
+      if (requestId === pairPreparationRequestRef.current) setIsLoadingPairPreparation(false)
+    }
+  }
+
+  function clearUsPair() {
+    clearPairPreparation()
   }
 
   async function loadFieldPlacements(participants: PairRecord[]) {
@@ -1741,6 +1807,7 @@ function App() {
     setLeagueReference('')
     setSelectedPairId(null)
     setPairHistory(null)
+    clearPairPreparation()
     setFieldPlacementSummaries({})
     setFieldPlacementsLoaded(false)
     setFieldPlacementError(null)
@@ -2221,7 +2288,11 @@ function App() {
                         <td>
                           <div className="pair-cell">
                             <span className="pair-index">{String(index + 1).padStart(2, '0')}</span>
-                            <div><strong>{pair.first.name}</strong><span>{pair.second.name}</span></div>
+                            <div>
+                              <strong>{pair.first.name}</strong>
+                              <span>{pair.second.name}</span>
+                              {pair.id === usPairId && <span className="pair-us-badge">US</span>}
+                            </div>
                           </div>
                         </td>
                         <td>
@@ -2280,7 +2351,19 @@ function App() {
                 <h2>{selectedPair.first.name} + {selectedPair.second.name}</h2>
                 <p>Placements come first. Open a tournament when you want the match-by-match context.</p>
               </div>
-              <button className="icon-button quiet" type="button" onClick={() => { setSelectedPairId(null); setPairHistory(null) }} aria-label="Close pair history"><X size={17} /></button>
+              <div className="pair-history-actions">
+                <button
+                  className={`us-select-button${usPairId === selectedPair.id ? ' is-selected' : ''}`}
+                  type="button"
+                  aria-pressed={usPairId === selectedPair.id}
+                  onClick={() => usPairId === selectedPair.id ? clearUsPair() : void setPairAsUs(selectedPair)}
+                  disabled={isLoadingPairPreparation || (!isViewingSnapshot && !pairHistory?.first.analysis && isLoadingPair)}
+                >
+                  {isLoadingPairPreparation && usPairId === selectedPair.id ? <LoaderCircle className="spin" size={13} /> : null}
+                  {usPairId === selectedPair.id ? 'Us selected' : 'Set as us'}
+                </button>
+                <button className="icon-button quiet" type="button" onClick={() => { setSelectedPairId(null); setPairHistory(null) }} aria-label="Close pair history"><X size={17} /></button>
+              </div>
             </div>
 
             <div className="pair-history-grid">
@@ -2299,6 +2382,17 @@ function App() {
                 showContext={preferences.showContext}
               />
             </div>
+            {usPairId === selectedPair.id && (
+              <PairPreparationPanel
+                pair={selectedPair}
+                context={pairPreparation?.context ?? null}
+                isLoading={isLoadingPairPreparation}
+                error={pairPreparationError}
+                isSnapshot={isViewingSnapshot}
+                requestedEvents={pairPreparation?.requestedEvents ?? 0}
+                failedEvents={pairPreparation?.failedEvents ?? 0}
+              />
+            )}
           </section>
         )}
 

@@ -95,6 +95,7 @@ export type MatchRecord = {
   won: boolean | null
   partner: string
   opponents: string[]
+  opponentIds: number[]
   score: string
 }
 
@@ -1392,6 +1393,7 @@ function normalizeMatch(match: RawMatch, playerId: number): MatchRecord | null {
     won,
     partner: sideNames(currentSide).find((name) => name !== currentSide.Name) ?? '',
     opponents: sideNames(opponentSide),
+    opponentIds: [opponentSide.Player1Id, opponentSide.Player2Id].filter((id) => id > 0),
     score: formatMatchScore(match),
   }
 }
@@ -1432,6 +1434,31 @@ export async function getEventMatches(tournamentId: number, classId: number, pla
     const normalized = normalizeMatch(match, playerId)
     return normalized ? [normalized] : []
   })
+}
+
+export type RecentPlayerMatches = {
+  matches: MatchRecord[]
+  requestedEvents: number
+  loadedEvents: number
+  failedEvents: number
+}
+
+export async function getRecentPlayerMatches(analysis: PlayerAnalysis, maxEvents = 5): Promise<RecentPlayerMatches> {
+  const events = analysis.events
+    .filter((event) => event.matchQuery)
+    .slice(0, maxEvents)
+  const results = await Promise.allSettled(events.map((event) => {
+    const query = event.matchQuery
+    if (!query) return Promise.resolve([] as MatchRecord[])
+    return getEventMatches(query.tournamentId, query.classId, analysis.playerId)
+  }))
+
+  return {
+    matches: results.flatMap((result) => result.status === 'fulfilled' ? result.value : []),
+    requestedEvents: events.length,
+    loadedEvents: results.filter((result) => result.status === 'fulfilled').length,
+    failedEvents: results.filter((result) => result.status === 'rejected').length,
+  }
 }
 
 async function analyzeEvent(event: RawEvent, playerId: number): Promise<PlayerEventAnalysis> {
