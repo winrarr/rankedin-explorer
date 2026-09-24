@@ -35,17 +35,18 @@ src/lib/rankedin.ts  ── normalized domain types ──>  React view state
 1. Parse a public tournament URL or ID.
 2. Load the tournament header and standings metadata.
 3. Load participants for the selected class.
-4. When a pair is selected, page through each player's participated events and keep finished events; the pair card also reads the profile's current-year and career doubles records.
-5. For each event, locate the player's result by numeric participant ID across classes.
-6. For the field summary, select each player's newest `Type === 3` Lunar League event and resolve only its division name; older seasons and placement are excluded.
-7. Load matches for the matching class and normalize partners, opponents, scores and outcomes.
-8. When the user marks a selected pair as “us”, inspect up to five recent finished events from the first player's history, retain numeric opponent IDs, intersect them with the current class roster, deduplicate by match ID and show a compact preparation context.
+4. Load each field player's current DPF ranking points alongside recent placement and Lunar League summaries.
+5. When a pair is selected, page through each player's participated events and keep finished events; the pair card also reads the profile's current-year and career doubles records.
+6. For each event, locate the player's result by numeric participant ID across classes.
+7. For the field summary, select each player's newest `Type === 3` Lunar League event and resolve only its division name; older seasons and placement are excluded.
+8. Load matches for the matching class and normalize partners, opponents, scores and outcomes.
+9. When the user marks a selected pair as “us”, inspect up to five recent finished events from the first player's history, retain numeric opponent IDs, intersect them with the current class roster, deduplicate by match ID and show a compact preparation context.
 
 ### Player Progress
 
 1. Parse a public player profile URL or `R...` ID.
 2. Resolve the public ID to the API's numeric player ID and profile metadata.
-3. Load one bounded participated-event window and split it into finished tournament events and finished Lunar League seasons.
+3. Load the current official DPF ranking points alongside one bounded participated-event window, then split the events into finished tournament events and finished Lunar League seasons.
 4. Analyze tournament placements and league seasons in parallel. For tournaments, locate the player's result by numeric participant ID across event classes.
 5. For Lunar League, resolve the player's team directly, then load pool standing, team fixtures and individual doubles in parallel within the shared request queue.
 6. For the combined league chart, load the pool fixture list, the league ordering rules and one aggregate standing response per completed fixture. Reconstruct the selected team's rank after each of its own fixtures using all pool fixtures completed by that point, while keeping fixture result, score and opponent on the checkpoint. Show only divisions the player has entered, use the player's first-to-last fixture as each season slot, and compress gaps between chronological slots while preserving fixture order within each slot.

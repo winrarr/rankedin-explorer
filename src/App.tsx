@@ -29,6 +29,7 @@ import {
 import {
   getClassParticipants,
   getCurrentPlayerLeague,
+  getPlayerDpfRankings,
   getPlayerAnalysis,
   getPlayerCurrentLeagueDivision,
   getPlayerLeagueAnalysis,
@@ -43,6 +44,7 @@ import {
   type PairRecord,
   type PlayerAnalysis,
   type PlayerEventAnalysis,
+  type DpfPlayerRanking,
   type PlayerLeagueAnalysis,
   type PlayerLeagueDivision,
   type LeagueSeasonAnalysis,
@@ -61,6 +63,7 @@ import {
   type Preferences,
 } from './lib/preferences'
 import { MetricCard } from './components/MetricCard'
+import { RankedinLink } from './components/RankedinLink'
 import { LoadingValue } from './components/LoadingValue'
 import {
   FieldClassSummaryGrid,
@@ -98,6 +101,7 @@ import './App.css'
 const PLAYER_PROGRESS_HISTORY_LIMIT = 25
 const FIELD_PLACEMENT_CONCURRENCY = 3
 const FIELD_LEAGUE_CONCURRENCY = 6
+const FIELD_DPF_CONCURRENCY = 3
 
 type WorkspaceMode = 'tournament' | 'player' | 'league'
 type PairPreparationState = {
@@ -108,6 +112,10 @@ type PairPreparationState = {
 type PairHistoryState = {
   first: { analysis: PlayerAnalysis | null; error: string | null }
   second: { analysis: PlayerAnalysis | null; error: string | null }
+}
+type FieldDpfLookup = {
+  ranking: DpfPlayerRanking | null
+  failed: boolean
 }
 
 type SharedLocation = {
@@ -250,6 +258,10 @@ function fieldPlacementSummary(event: PlayerEventAnalysis) {
     position: placementSummaryPosition(event),
     fieldSize: event.fieldSize,
   }
+}
+
+function formatDpfPoints(points: number) {
+  return new Intl.NumberFormat('en-GB', { maximumFractionDigits: 1 }).format(points)
 }
 
 type ProgressPoint = {
@@ -927,6 +939,9 @@ function LeagueProgressSection({ seasons, isLoading, error }: LeagueProgressSect
 type PlayerProgressWorkspaceProps = {
   profile: PlayerProfile | null
   analysis: PlayerAnalysis | null
+  dpfRankings: DpfPlayerRanking[] | null
+  dpfRankingError: string | null
+  isLoadingDpfRankings: boolean
   leagueAnalysis: PlayerLeagueAnalysis | null
   leagueError: string | null
   isLoadingLeague: boolean
@@ -940,7 +955,7 @@ type PlayerProgressWorkspaceProps = {
   canPrintReport: boolean
 }
 
-function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueError, isLoadingLeague, error, isLoading, loadingStage, onCopyShareLink, onPrintReport, shareCopied, canShare, canPrintReport }: PlayerProgressWorkspaceProps) {
+function PlayerProgressWorkspace({ profile, analysis, dpfRankings, dpfRankingError, isLoadingDpfRankings, leagueAnalysis, leagueError, isLoadingLeague, error, isLoading, loadingStage, onCopyShareLink, onPrintReport, shareCopied, canShare, canPrintReport }: PlayerProgressWorkspaceProps) {
   const series = useMemo(() => progressSeries(analysis?.events ?? []), [analysis])
   const points = useMemo(() => series.flatMap((item) => item.points), [series])
   const latestPoint = [...points].sort((first, second) => (
@@ -948,6 +963,7 @@ function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueErro
   ))[0]
   const average = points.length ? points.reduce((sum, point) => sum + point.percentage, 0) / points.length : null
   const unavailableCount = analysis ? analysis.events.length - points.length : 0
+  const currentDpfRanking = dpfRankings?.[0] ?? null
 
   return (
     <>
@@ -982,7 +998,29 @@ function PlayerProgressWorkspace({ profile, analysis, leagueAnalysis, leagueErro
       {analysis && (
         <>
           <section className="metric-grid progress-metric-grid" aria-label="Player progress summary">
-            <MetricCard dark icon={<Trophy size={15} />} label="RESULTS CHARTED" value={points.length} detail="finished placements" />
+            <MetricCard
+              dark
+              icon={<Activity size={15} />}
+              label="CURRENT DPF POINTS"
+              value={isLoadingDpfRankings
+                ? <LoadingValue />
+                : currentDpfRanking
+                  ? <RankedinLink
+                      className="dpf-points-value-link"
+                      path={currentDpfRanking.rankingUrl}
+                      showIcon={false}
+                      ariaLabel="Open the current official DPF ranking on Rankedin"
+                    >{formatDpfPoints(currentDpfRanking.points)}</RankedinLink>
+                  : '—'}
+              detail={currentDpfRanking
+                ? `#${currentDpfRanking.position} · ${currentDpfRanking.ageGroup ?? currentDpfRanking.matchType}${currentDpfRanking.rankingDate ? ` · updated ${formatCompactDate(currentDpfRanking.rankingDate)}` : ''}`
+                : isLoadingDpfRankings
+                  ? 'official DPF ranking'
+                  : dpfRankingError
+                    ? 'ranking unavailable'
+                    : 'no current DPF rank'}
+            />
+            <MetricCard icon={<Trophy size={15} />} label="RESULTS CHARTED" value={points.length} detail="finished placements" />
             <MetricCard icon={<Users size={15} />} label="LEVELS IN HISTORY" value={series.length} detail="normalized classes" />
             <MetricCard icon={<Gauge size={15} />} label="AVERAGE FINISH" value={formatPercent(average)} detail="all comparable results" />
             <MetricCard icon={<CalendarDays size={15} />} label="LATEST RESULT" value={latestPoint ? formatPercent(latestPoint.percentage) : '—'} detail={latestPoint ? formatCompactDate(latestPoint.event.startDate) : 'no comparable result'} />
@@ -1071,6 +1109,9 @@ function App() {
   const [leagueReference, setLeagueReference] = useState(initialLocation.leagueReference)
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null)
   const [playerAnalysis, setPlayerAnalysis] = useState<PlayerAnalysis | null>(null)
+  const [playerDpfRankings, setPlayerDpfRankings] = useState<DpfPlayerRanking[] | null>(null)
+  const [isLoadingPlayerDpfRankings, setIsLoadingPlayerDpfRankings] = useState(false)
+  const [playerDpfRankingError, setPlayerDpfRankingError] = useState<string | null>(null)
   const [playerLeagueAnalysis, setPlayerLeagueAnalysis] = useState<PlayerLeagueAnalysis | null>(null)
   const [isAnalyzingPlayer, setIsAnalyzingPlayer] = useState(false)
   const [isLoadingLeague, setIsLoadingLeague] = useState(false)
@@ -1096,6 +1137,10 @@ function App() {
   const [fieldPlacementsLoaded, setFieldPlacementsLoaded] = useState(false)
   const [isLoadingFieldPlacements, setIsLoadingFieldPlacements] = useState(false)
   const [fieldPlacementError, setFieldPlacementError] = useState<string | null>(null)
+  const [fieldDpfRankings, setFieldDpfRankings] = useState<Record<number, FieldDpfLookup>>({})
+  const [fieldDpfRankingsLoaded, setFieldDpfRankingsLoaded] = useState(false)
+  const [isLoadingFieldDpfRankings, setIsLoadingFieldDpfRankings] = useState(false)
+  const [fieldDpfRankingError, setFieldDpfRankingError] = useState<string | null>(null)
   const [fieldLeagueDivisions, setFieldLeagueDivisions] = useState<Record<number, PlayerLeagueDivision | null>>({})
   const [fieldLeagueDivisionsLoaded, setFieldLeagueDivisionsLoaded] = useState(false)
   const [isLoadingFieldLeagueDivisions, setIsLoadingFieldLeagueDivisions] = useState(false)
@@ -1105,6 +1150,7 @@ function App() {
   const [showLeagueSearch, setShowLeagueSearch] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
   const fieldPlacementRequestRef = useRef(0)
+  const fieldDpfRequestRef = useRef(0)
   const fieldLeagueRequestRef = useRef(0)
   const tournamentRequestRef = useRef(0)
   const playerRequestRef = useRef(0)
@@ -1224,6 +1270,7 @@ function App() {
   useEffect(() => {
     if (activeMode !== 'tournament' || !snapshot) return
     void loadFieldPlacements(snapshot.participants)
+    void loadFieldDpfRankings(snapshot.participants)
     void loadFieldLeagueDivisions(snapshot.participants)
   }, [activeMode, snapshot])
 
@@ -1372,6 +1419,9 @@ function App() {
     setShareCopied(false)
     setPlayerProfile(null)
     setPlayerAnalysis(null)
+    setPlayerDpfRankings(null)
+    setIsLoadingPlayerDpfRankings(false)
+    setPlayerDpfRankingError(null)
     setPlayerLeagueAnalysis(null)
     setIsLoadingLeague(false)
     setPlayerReference(normalizedReference)
@@ -1383,9 +1433,23 @@ function App() {
       updateSharedLocation({ mode: 'player', player: profile.rankedInId })
       setPlayerProfile(profile)
       setPlayerAnalysis({ playerId: profile.id, playerName: profile.name, events: [] })
+      setIsLoadingPlayerDpfRankings(true)
       setPlayerLeagueAnalysis({ playerId: profile.id, playerName: profile.name, seasons: [] })
       setIsLoadingLeague(true)
       setPlayerLoadingStage('history')
+      void getPlayerDpfRankings(profile)
+        .then((rankings) => {
+          if (requestId === playerRequestRef.current) setPlayerDpfRankings(rankings)
+        })
+        .catch(() => {
+          if (requestId === playerRequestRef.current) {
+            setPlayerDpfRankingError('Current DPF points could not be loaded.')
+          }
+        })
+        .finally(() => {
+          if (requestId === playerRequestRef.current) setIsLoadingPlayerDpfRankings(false)
+        })
+
       const [tournamentResult, leagueResult] = await Promise.allSettled([
         getPlayerAnalysis(profile.id, PLAYER_PROGRESS_HISTORY_LIMIT, (event) => {
           if (requestId !== playerRequestRef.current) return
@@ -1569,6 +1633,11 @@ function App() {
       setFieldPlacementsLoaded(false)
       setFieldPlacementError(null)
       setIsLoadingFieldPlacements(false)
+      fieldDpfRequestRef.current += 1
+      setFieldDpfRankings({})
+      setFieldDpfRankingsLoaded(false)
+      setFieldDpfRankingError(null)
+      setIsLoadingFieldDpfRankings(false)
       setFieldLeagueDivisions({})
       setFieldLeagueDivisionsLoaded(false)
       setFieldLeagueDivisionError(null)
@@ -1706,6 +1775,41 @@ function App() {
       setFieldPlacementError(`${failedCount} player ${failedCount === 1 ? 'summary was' : 'summaries were'} unavailable.`)
     }
     setIsLoadingFieldPlacements(false)
+  }
+
+  async function loadFieldDpfRankings(participants: PairRecord[]) {
+    const requestId = fieldDpfRequestRef.current + 1
+    fieldDpfRequestRef.current = requestId
+    const players = participants.flatMap((pair) => [pair.first, pair.second])
+    setIsLoadingFieldDpfRankings(true)
+    setFieldDpfRankingError(null)
+    setFieldDpfRankings({})
+    setFieldDpfRankingsLoaded(false)
+
+    const results = await settleWithConcurrency(players, FIELD_DPF_CONCURRENCY, async (player) => {
+      try {
+        const rankings = await getPlayerDpfRankings(player)
+        const lookup = { ranking: rankings[0] ?? null, failed: false }
+        if (requestId === fieldDpfRequestRef.current) {
+          setFieldDpfRankings((current) => ({ ...current, [player.id]: lookup }))
+        }
+        return lookup
+      } catch {
+        const lookup = { ranking: null, failed: true }
+        if (requestId === fieldDpfRequestRef.current) {
+          setFieldDpfRankings((current) => ({ ...current, [player.id]: lookup }))
+        }
+        throw new Error(`DPF ranking could not be read for ${player.name}.`)
+      }
+    })
+
+    if (requestId !== fieldDpfRequestRef.current) return
+    const failedCount = results.filter((result) => result.status === 'rejected').length
+    setFieldDpfRankingsLoaded(true)
+    if (failedCount) {
+      setFieldDpfRankingError(`${failedCount} DPF ${failedCount === 1 ? 'ranking was' : 'rankings were'} unavailable.`)
+    }
+    setIsLoadingFieldDpfRankings(false)
   }
 
   async function loadFieldLeagueDivisions(participants: PairRecord[]) {
@@ -2141,13 +2245,15 @@ function App() {
                 <p>{snapshot.selectedClass.name.includes('(') ? snapshot.selectedClass.name.match(/\(([^)]+)\)/)?.[1] : 'Selected class'} <span className="muted-divider">/</span> {snapshot.participants.length} pairs visible</p>
               </div>
               <div className="field-card-tools">
-                <div className={`placement-load-status ${isLoadingFieldData ? 'is-loading' : ''}`} aria-live="polite">
-                  {isLoadingFieldData ? <LoaderCircle className="spin" size={14} /> : <History size={14} />}
+                <div className={`placement-load-status ${isLoadingFieldData || isLoadingFieldDpfRankings ? 'is-loading' : ''}`} aria-live="polite">
+                  {isLoadingFieldData || isLoadingFieldDpfRankings ? <LoaderCircle className="spin" size={14} /> : <History size={14} />}
                   {isLoadingFieldPlacements
                     ? `Reading latest 5 · ${Object.keys(fieldPlacementSummaries).length}/${snapshot.participants.length * 2} players…`
                     : isLoadingFieldLeagueDivisions
                       ? 'Reading current divisions…'
-                      : fieldPlacementsLoaded ? 'Latest 5 per player' : 'Placement summary unavailable'}
+                      : isLoadingFieldDpfRankings
+                        ? `Reading DPF points · ${Object.keys(fieldDpfRankings).length}/${snapshot.participants.length * 2} players…`
+                        : fieldDpfRankingsLoaded ? 'Latest 5 + DPF points per player' : fieldPlacementsLoaded ? 'Latest 5 per player' : 'Placement summary unavailable'}
                 </div>
                 <div className="class-picker-wrap">
                   <select value={snapshot.selectedClass.id} onChange={(event) => void chooseClass(Number(event.target.value))} disabled={isLoadingClass || isLoadingFieldData} aria-label="Choose tournament class">
@@ -2156,6 +2262,7 @@ function App() {
                   {isLoadingClass ? <LoaderCircle className="picker-loader spin" size={15} /> : <ChevronDown className="picker-chevron" size={15} />}
                 </div>
                 {fieldPlacementError && <span className="placement-load-note">{fieldPlacementError}</span>}
+                {fieldDpfRankingError && <span className="placement-load-note">{fieldDpfRankingError}</span>}
                 {fieldLeagueDivisionError && <span className="placement-load-note">{fieldLeagueDivisionError}</span>}
               </div>
             </div>
@@ -2210,7 +2317,7 @@ function App() {
 
             <div className="table-scroll roster-table-scroll">
               <table className="roster-table">
-                <thead><tr><th>PAIR</th><th>LAST 5 / PLAYER</th><th><span className="table-header-with-info">SKILL <InfoTip label="About skill" message="Historical rating shown at tournament start, not a live rating." /></span></th></tr></thead>
+                <thead><tr><th>PAIR</th><th><span className="table-header-with-info">LAST 5 / PLAYER / DPF POINTS <InfoTip label="About DPF points" message="Current points in the official Dansk Padel Forbund ranking. Select a player’s points to open the Rankedin ranking." /></span></th><th><span className="table-header-with-info">SKILL <InfoTip label="About skill" message="Historical rating shown at tournament start, not a live rating." /></span></th></tr></thead>
                 <tbody>
                   {visibleParticipants.map((pair, index) => {
                     const rating = pairRating(pair)
@@ -2250,10 +2357,28 @@ function App() {
                             {[pair.first, pair.second].map((player) => {
                               const summary = fieldPlacementSummaries[player.id]
                               const hasSummary = Object.prototype.hasOwnProperty.call(fieldPlacementSummaries, player.id)
+                              const dpfLookup = fieldDpfRankings[player.id]
+                              const dpfRanking = dpfLookup?.ranking ?? null
                               const events = fieldPlacementEvents(summary ?? null)
                               return (
                                 <div className="field-placement-player" key={player.id}>
-                                  <span className="field-placement-player-name">{player.name}</span>
+                                  <div className="field-placement-player-name">
+                                    <span className="field-placement-name">{player.name}</span>
+                                    {dpfRanking ? (
+                                      <RankedinLink
+                                        className="field-dpf-summary"
+                                        path={dpfRanking.rankingUrl}
+                                        showIcon={false}
+                                        ariaLabel={`${player.name}: ${formatDpfPoints(dpfRanking.points)} current DPF points, rank ${dpfRanking.position} · ${dpfRanking.ageGroup ?? dpfRanking.matchType}${dpfRanking.rankingDate ? ` · updated ${formatCompactDate(dpfRanking.rankingDate)}` : ''}`}
+                                      >DPF {formatDpfPoints(dpfRanking.points)}</RankedinLink>
+                                    ) : (
+                                      <span className="field-dpf-summary field-dpf-summary-muted">
+                                        {!dpfLookup && isLoadingFieldDpfRankings
+                                          ? 'DPF points…'
+                                          : dpfLookup?.failed ? 'DPF unavailable' : 'No current DPF points'}
+                                      </span>
+                                    )}
+                                  </div>
                                   <span className="field-placement-tags">
                                     {!hasSummary && isLoadingFieldPlacements && <span className="field-placement-muted loading-inline"><LoaderCircle className="spin" size={11} aria-hidden="true" /> Reading…</span>}
                                     {!hasSummary && !isLoadingFieldPlacements && !fieldPlacementsLoaded && <span className="field-placement-muted">Not loaded</span>}
@@ -2353,6 +2478,9 @@ function App() {
           <PlayerProgressWorkspace
             profile={playerProfile}
             analysis={playerAnalysis}
+            dpfRankings={playerDpfRankings}
+            dpfRankingError={playerDpfRankingError}
+            isLoadingDpfRankings={isLoadingPlayerDpfRankings}
             leagueAnalysis={playerLeagueAnalysis}
             leagueError={playerLeagueError}
             isLoadingLeague={isLoadingLeague}

@@ -49,7 +49,18 @@ export type PlayerProfile = PlayerRecord & {
   countryCode: string | null
   homeClubName: string | null
   homeClubUrl: string | null
+  age: number | null
   doublesStats: PlayerDoublesStats
+}
+
+export type DpfPlayerRanking = {
+  points: number
+  position: number
+  ageGroup: string | null
+  matchType: string
+  rankingDate: string | null
+  rankingName: string
+  rankingUrl: string
 }
 
 export type PairRecord = {
@@ -362,6 +373,7 @@ type RawPlayerProfileResponse = {
     PlayerId: number
     FirstName: string
     LastName: string
+    Age?: string | null
     CountryShort: string | null
     RankedinId: string
     HomeClubName: string | null
@@ -618,6 +630,30 @@ type RawResultsResponse = {
   Data: RawResult[]
 }
 
+type RawRankingSearchResult = {
+  Name: string
+  Url: string
+  OrganisationName: string | null
+}
+
+type RawDpfRankingEntry = {
+  Name: string | null
+  RankedinId: string | null
+  PlayerAgeGroup: string | null
+  Participant?: {
+    MatchTypeId: number
+  }
+  ParticipantPoints?: {
+    Points: number
+    RankingDate: string
+  }
+  Standing: number
+}
+
+type RawDpfRankingSearchResponse = {
+  Payload: RawDpfRankingEntry[] | null
+}
+
 type PlayerClassResult = {
   classOption: RawClassOption
   result: RawResultsResponse
@@ -661,6 +697,8 @@ type RawMatchesResponse = {
 const responseCache = new Map<string, Promise<unknown>>()
 const eventAnalysisCache = new Map<string, Promise<PlayerEventAnalysis>>()
 const participatedEventsCache = new Map<number, Promise<RawEvent[]>>()
+const dpfPlayerRankingCache = new Map<string, Promise<DpfPlayerRanking[]>>()
+let dpfRankingReferenceCache: Promise<{ id: number; url: string } | null> | null = null
 type QueuedRequest = {
   cancelled: boolean
   run: () => void
@@ -673,6 +711,8 @@ const MAX_CLASS_PROBE_CONCURRENCY = 2
 const MAX_LEAGUE_STANDING_CONCURRENCY = 4
 const MAX_RETRY_ATTEMPTS = 4
 const PARTICIPATED_EVENTS_TAKE = 50
+const DPF_RANKING_NAME = 'Dansk Padel Forbunds rangliste'
+const DPF_RANKING_ORGANISATION = 'Dansk Padel Forbund'
 let activeRequestCount = 0
 let requestNotBefore = 0
 let requestDrainTimer: ReturnType<typeof setTimeout> | null = null
@@ -1120,6 +1160,180 @@ export function parsePlayerReference(value: string) {
   return { rankedInId }
 }
 
+function dpfAgeGroup(age: number | null, isWomen: boolean) {
+  if (age === null) return isWomen ? 83 : 82
+  if (age < 20) {
+    if (isWomen) {
+      if (age >= 18) return 75
+      if (age >= 16) return 74
+      if (age >= 14) return 73
+      if (age >= 12) return 72
+      if (age >= 10) return 71
+      return 70
+    }
+    if (age >= 18) return 69
+    if (age >= 16) return 68
+    if (age >= 14) return 67
+    if (age >= 12) return 66
+    if (age >= 10) return 65
+    return 64
+  }
+  if (age < 35) return isWomen ? 83 : 82
+
+  if (isWomen) {
+    if (age >= 70) return 21
+    if (age >= 65) return 20
+    if (age >= 60) return 19
+    if (age >= 55) return 18
+    if (age >= 50) return 17
+    if (age >= 45) return 16
+    if (age >= 40) return 15
+    return 14
+  }
+  if (age >= 85) return 12
+  if (age >= 80) return 11
+  if (age >= 75) return 10
+  if (age >= 70) return 9
+  if (age >= 65) return 8
+  if (age >= 60) return 7
+  if (age >= 55) return 6
+  if (age >= 50) return 5
+  if (age >= 45) return 4
+  if (age >= 40) return 3
+  return 2
+}
+
+export function normalizeDpfRankingEntries(
+  entries: RawDpfRankingEntry[],
+  rankedInId: string,
+  rankingUrl: string,
+): DpfPlayerRanking[] {
+  return entries.flatMap((entry) => {
+    if (entry.RankedinId?.toUpperCase() !== rankedInId.toUpperCase()) return []
+    const points = entry.ParticipantPoints?.Points
+    const position = entry.Standing
+    if (typeof points !== 'number' || !Number.isFinite(points) || !Number.isFinite(position) || position < 1) return []
+
+    const matchType = entry.Participant?.MatchTypeId
+    return [{
+      points,
+      position,
+      ageGroup: entry.PlayerAgeGroup?.trim() || null,
+      matchType: matchType === 4 ? 'Women doubles' : 'Men doubles',
+      rankingDate: entry.ParticipantPoints?.RankingDate || null,
+      rankingName: DPF_RANKING_NAME,
+      rankingUrl,
+    }]
+  }).sort((first, second) => second.points - first.points)
+}
+
+async function getDpfRankingReference() {
+  if (dpfRankingReferenceCache) return dpfRankingReferenceCache
+
+  const pending = request<RawRankingSearchResult[]>(
+    `/Search/GetRankingsAsync${query({ term: DPF_RANKING_NAME, language: 'en', take: 10, skip: 0 })}`,
+  ).then((rankings) => {
+    const ranking = rankings.find((item) => (
+      item.Name.toLowerCase() === DPF_RANKING_NAME.toLowerCase() &&
+      item.OrganisationName?.toLowerCase() === DPF_RANKING_ORGANISATION.toLowerCase()
+    ))
+    const rankingId = ranking?.Url.match(/\/ranking\/(\d+)/i)?.[1]
+    if (!ranking || !rankingId) return null
+    return { id: Number(rankingId), url: ranking.Url }
+  })
+  dpfRankingReferenceCache = pending
+  pending.catch(() => {
+    if (dpfRankingReferenceCache === pending) dpfRankingReferenceCache = null
+  })
+  return pending
+}
+
+async function searchDpfRankingForPlayer(
+  player: Pick<PlayerRecord, 'rankedInId' | 'name'>,
+  rankingId: number,
+  rankingUrl: string,
+  rankingType: 3 | 4,
+  ageGroup: number,
+) {
+  const name = player.name.trim()
+  const normalizedName = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+  const searchTerms = Array.from(new Set([
+    name,
+    ...(normalizedName !== name ? [normalizedName] : []),
+    ...(/[-'’]/.test(name) ? [name.split(/\s+/)[0] ?? ''] : []),
+  ].filter(Boolean)))
+
+  for (const searchTerm of searchTerms) {
+    const response = await request<RawDpfRankingSearchResponse>(
+      `/Ranking/SearchRankingPlayersAsync${query({
+        SearchTerm: searchTerm,
+        RankingId: rankingId,
+        RankingType: rankingType,
+        AgeGroup: ageGroup,
+        ParticipantAgeGroup: ageGroup,
+        ParticipantGender: rankingType === 4 ? 2 : 1,
+        Language: 'en',
+        Skip: 0,
+        Take: 100,
+      })}`,
+    )
+    const matches = normalizeDpfRankingEntries(response.Payload ?? [], player.rankedInId, rankingUrl)
+    if (matches.length) return matches
+  }
+
+  return []
+}
+
+async function loadDpfPlayerRankings(
+  player: Pick<PlayerProfile, 'id' | 'rankedInId' | 'name' | 'age'>,
+): Promise<DpfPlayerRanking[]> {
+  const ranking = await getDpfRankingReference()
+  if (!ranking) return []
+
+  const rankedAgeGroups: Array<[3 | 4, number]> = [
+    [3, dpfAgeGroup(player.age, false)],
+    [4, dpfAgeGroup(player.age, true)],
+  ]
+  let lookups = await Promise.allSettled(rankedAgeGroups.map(([rankingType, ageGroup]) => (
+    searchDpfRankingForPlayer(player, ranking.id, ranking.url, rankingType, ageGroup)
+  )))
+  let rankings = lookups.flatMap((lookup) => lookup.status === 'fulfilled' ? lookup.value : [])
+
+  if (!rankings.length && player.age !== null && rankedAgeGroups.some(([, ageGroup], index) => (
+    ageGroup !== (index === 0 ? 82 : 83)
+  ))) {
+    lookups = await Promise.allSettled([
+      searchDpfRankingForPlayer(player, ranking.id, ranking.url, 3, 82),
+      searchDpfRankingForPlayer(player, ranking.id, ranking.url, 4, 83),
+    ])
+    rankings = lookups.flatMap((lookup) => lookup.status === 'fulfilled' ? lookup.value : [])
+  }
+
+  if (!rankings.length && lookups.every((lookup) => lookup.status === 'rejected')) {
+    throw lookups[0].status === 'rejected' ? lookups[0].reason : new Error('The DPF ranking could not be loaded.')
+  }
+
+  const uniqueRankings = new Map<string, DpfPlayerRanking>()
+  rankings.forEach((item) => uniqueRankings.set(`${item.matchType}:${item.ageGroup}:${item.position}`, item))
+  return Array.from(uniqueRankings.values()).sort((first, second) => second.points - first.points)
+}
+
+export function getPlayerDpfRankings(
+  player: Pick<PlayerProfile, 'id' | 'rankedInId' | 'name' | 'age'> | PlayerRecord,
+): Promise<DpfPlayerRanking[]> {
+  const age = 'age' in player ? player.age : null
+  const cacheKey = `${player.id}:${age ?? 'unknown'}`
+  const cached = dpfPlayerRankingCache.get(cacheKey)
+  if (cached) return cached
+
+  const pending = loadDpfPlayerRankings({ ...player, age })
+  dpfPlayerRankingCache.set(cacheKey, pending)
+  pending.catch(() => {
+    if (dpfPlayerRankingCache.get(cacheKey) === pending) dpfPlayerRankingCache.delete(cacheKey)
+  })
+  return pending
+}
+
 export function parseWinLossRecord(value: string | null | undefined): WinLossRecord | null {
   const match = value?.match(/^(\d+)\s*[-–]\s*(\d+)$/)
   if (!match) return null
@@ -1150,6 +1364,7 @@ export async function getPlayerProfile(reference: string): Promise<PlayerProfile
     `/player/PlayerProfileInfoAsync${query({ rankedinId: rankedInId, language: 'en' })}`,
   )
   const header = response.Header
+  const age = header.Age?.trim()
 
   return {
     id: header.PlayerId,
@@ -1160,6 +1375,7 @@ export async function getPlayerProfile(reference: string): Promise<PlayerProfile
     countryCode: header.CountryShort,
     homeClubName: header.HomeClubName,
     homeClubUrl: header.HomeClubUrl,
+    age: age && Number.isFinite(Number(age)) ? Number(age) : null,
     doublesStats: {
       currentYear: parseWinLossRecord(response.Statistics?.WinLossDoublesCurrentYear),
       career: parseWinLossRecord(response.Statistics?.CareerWinLossDoubles),

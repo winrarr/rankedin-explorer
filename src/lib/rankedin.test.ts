@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { tournament68954ClassLabels } from './fixtures/tournament-68954-class-labels'
 import { additionalTournamentClassLabels } from './fixtures/tournament-class-labels'
-import { normalizeCompetitionClassName, parseLeagueReference, parsePlayerReference, parseTournamentReference, parseWinLossRecord } from './rankedin'
+import { normalizeCompetitionClassName, normalizeDpfRankingEntries, parseLeagueReference, parsePlayerReference, parseTournamentReference, parseWinLossRecord } from './rankedin'
 
 describe('parseTournamentReference', () => {
   it('accepts a full Rankedin tournament URL', () => {
@@ -72,5 +72,36 @@ describe('parseWinLossRecord', () => {
   it('returns null for missing or malformed statistics', () => {
     expect(parseWinLossRecord(null)).toBeNull()
     expect(parseWinLossRecord('unknown')).toBeNull()
+  })
+})
+
+describe('normalizeDpfRankingEntries', () => {
+  it('keeps the selected player’s current points and ranking context', () => {
+    expect(normalizeDpfRankingEntries([
+      {
+        Name: 'Emil Lilleøre',
+        RankedinId: 'R000051592',
+        PlayerAgeGroup: 'Men-Main',
+        Participant: { MatchTypeId: 3 },
+        ParticipantPoints: { Points: 11645, RankingDate: '2026-09-21T00:00:00' },
+        Standing: 2,
+      },
+      {
+        Name: 'Another player with the same name',
+        RankedinId: 'R000051593',
+        PlayerAgeGroup: 'Men-Main',
+        Participant: { MatchTypeId: 3 },
+        ParticipantPoints: { Points: 9000, RankingDate: '2026-09-21T00:00:00' },
+        Standing: 4,
+      },
+    ], 'R000051592', '/en/ranking/2032/dansk-padel-forbunds-rangliste')).toEqual([{
+      points: 11645,
+      position: 2,
+      ageGroup: 'Men-Main',
+      matchType: 'Men doubles',
+      rankingDate: '2026-09-21T00:00:00',
+      rankingName: 'Dansk Padel Forbunds rangliste',
+      rankingUrl: '/en/ranking/2032/dansk-padel-forbunds-rangliste',
+    }])
   })
 })
