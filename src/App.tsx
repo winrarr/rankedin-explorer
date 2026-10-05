@@ -15,7 +15,6 @@ import {
   Gauge,
   GitBranch,
   History,
-  Info,
   LoaderCircle,
   LineChart,
   Printer,
@@ -1941,9 +1940,8 @@ function App() {
         </a>
 
         <div className="topbar-actions">
-          <span className="topbar-label">READ-ONLY TOOL</span>
-          <a className="source-link" href="https://www.rankedin.com" target="_blank" rel="noreferrer">
-            Rankedin source <ExternalLink size={14} />
+          <a className="source-link" href="https://www.rankedin.com" target="_blank" rel="noreferrer" aria-label="Open Rankedin">
+            <span className="source-link-label">Rankedin source</span> <ExternalLink size={14} />
           </a>
           <button
             className="icon-button quiet"
@@ -2022,7 +2020,7 @@ function App() {
               aria-selected={activeMode === 'tournament'}
               onClick={() => switchMode('tournament')}
             >
-              <Trophy size={15} /> Tournament Explorer
+              <Trophy size={15} /> <span className="workspace-tab-full">Tournament Explorer</span><span className="workspace-tab-short">Tournament</span>
             </button>
             <button
               className={activeMode === 'player' ? 'is-active' : ''}
@@ -2031,7 +2029,7 @@ function App() {
               aria-selected={activeMode === 'player'}
               onClick={() => switchMode('player')}
             >
-              <LineChart size={15} /> Player Progress
+              <LineChart size={15} /> <span className="workspace-tab-full">Player Progress</span><span className="workspace-tab-short">Player</span>
             </button>
             <button
               className={activeMode === 'league' ? 'is-active' : ''}
@@ -2040,7 +2038,7 @@ function App() {
               aria-selected={activeMode === 'league'}
               onClick={() => switchMode('league')}
             >
-              <GitBranch size={15} /> Lunar League Explorer
+              <GitBranch size={15} /> <span className="workspace-tab-full">Lunar League Explorer</span><span className="workspace-tab-short">League</span>
             </button>
           </div>
         </div>
@@ -2049,15 +2047,11 @@ function App() {
       <main>
         <section className="hero-grid">
           <div className="hero-copy">
-            <div className="eyebrow"><span className="eyebrow-dot" /> Rankedin intelligence, without the digging</div>
-            <h1>See the level <em>behind</em> the result.</h1>
-            <p className="hero-lede">
-              A clearer way to read tournament fields, player history and match context across Rankedin.
-            </p>
+            <h1>{activeMode === 'tournament' ? 'Explore a tournament' : activeMode === 'player' ? 'Track player progress' : 'Explore a Lunar League'}</h1>
 
             <div className="input-card">
               <label htmlFor={activeMode === 'tournament' ? 'tournament-url' : activeMode === 'player' ? 'player-reference' : 'league-reference'}>
-                {activeMode === 'tournament' ? 'Start with a public tournament' : activeMode === 'player' ? 'Find a public Rankedin player' : 'Start with a public Lunar League'}
+                {activeMode === 'tournament' ? 'Find a public tournament' : activeMode === 'player' ? 'Find a public player' : 'Find a public Lunar League'}
               </label>
               <div className="reference-search-anchor" ref={searchAnchorRef}>
                 <div className="url-input-row">
@@ -2088,7 +2082,7 @@ function App() {
                           void (activeMode === 'tournament' ? analyzeTournament() : activeMode === 'player' ? analyzePlayer() : analyzeLeague())
                         }
                       }}
-                      placeholder={activeMode === 'tournament' ? 'Search tournament name, URL or ID' : activeMode === 'player' ? 'Search player name, profile URL or R-number' : 'Search Lunar League or player name'}
+                      placeholder={activeMode === 'tournament' ? 'Search by name, URL or ID' : activeMode === 'player' ? 'Search by name, profile URL or R-number' : 'Search league or player name'}
                     />
                     {(activeMode === 'tournament' ? tournamentUrl : activeMode === 'player' ? playerReference : leagueReference) && <button className="clear-input" type="button" aria-label={`Clear ${activeMode} reference`} onClick={clearReference}><X size={14} /></button>}
                   </div>
@@ -2165,7 +2159,6 @@ function App() {
                   </div>
                 )}
               </div>
-              <p className="input-hint"><Info size={14} /> No login. No database. {activeMode === 'tournament' ? 'Paste a public tournament URL or ID to begin.' : activeMode === 'player' ? 'Type a name or paste a public profile URL/R-number.' : 'Search a league name, or search your player name to find your current public Lunar League team.'}</p>
               {((activeMode === 'tournament' && isAnalyzing) || (activeMode === 'player' && isAnalyzingPlayer && !playerProfile) || (activeMode === 'league' && isAnalyzingLeague && !leagueSnapshot)) && (
                 <div className="lookup-loading-state" role="status" aria-live="polite">
                   <LoaderCircle className="spin" size={16} />
@@ -2505,7 +2498,7 @@ function App() {
         ) : null}
       </main>
 
-      <footer className="footer"><span>Rankedin Explorer</span><span>Read-only personal utility <span className="muted-divider">/</span> source data remains with Rankedin</span><a href="https://api.rankedin.com/swagger/v1/swagger.json" target="_blank" rel="noreferrer">API map <ArrowUpRight size={13} /></a></footer>
+      <footer className="footer"><span className="footer-brand">Rankedin Explorer</span><span className="footer-note">Read-only personal utility <span className="muted-divider">/</span> source data remains with Rankedin</span><a href="https://api.rankedin.com/swagger/v1/swagger.json" target="_blank" rel="noreferrer">API map <ArrowUpRight size={13} /></a></footer>
     </div>
   )
 }
