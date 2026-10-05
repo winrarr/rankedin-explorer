@@ -29,9 +29,8 @@ export function PairPreparationPanel({ pair, context, isLoading, error, requeste
   return (
     <section className="pair-preparation-panel" aria-label={`Preparation context for ${pair.first.name} and ${pair.second.name}`}>
       <CardHeading
-        kicker="PREPARATION CONTEXT"
         title="Recent opponents in this field"
-        description="Checks up to five recent tournament events for the selected pair and keeps only opponents from this class."
+        description="From up to five recent tournament events."
         icon={<Users size={18} className="card-heading-icon" />}
       />
 

@@ -1,4 +1,4 @@
-import { CalendarDays, CircleHelp, GitBranch, LoaderCircle, Trophy, Users } from 'lucide-react'
+import { CalendarDays, GitBranch, LoaderCircle, Trophy, Users } from 'lucide-react'
 import type { LeagueFixture, LeagueSnapshot, LeagueStanding } from '../lib/rankedin'
 import { formatCompactDate, formatDate, ordinalPosition } from '../lib/formatters'
 import { CardHeading } from './CardHeading'
@@ -121,7 +121,6 @@ export function LeagueExplorer({ snapshot, isLoadingPool, onPoolChange, onCopySh
     <>
       <section className="workspace-heading">
         <div>
-          <div className="eyebrow">LUNAR LEAGUE SNAPSHOT <span className="live-dot" /> LIVE DATA</div>
           <h2>{snapshot.name}</h2>
           <p>{snapshot.location}, {snapshot.country} <span className="muted-divider">/</span> {snapshot.sport} <span className="muted-divider">/</span> {formatDate(snapshot.startDate)} – {formatDate(snapshot.endDate)}</p>
           <p className="print-report-meta">Lunar League overview · {pool?.name ?? 'No pool selected'} · Generated {formatDate(new Date().toISOString())} · rankedin.com{snapshot.eventUrl}</p>
@@ -143,9 +142,7 @@ export function LeagueExplorer({ snapshot, isLoadingPool, onPoolChange, onCopySh
 
       <section className="field-card league-selector-card">
         <div className="league-selector-copy">
-          <div className="section-kicker">POOL CONTEXT</div>
           <h2>{pool ? `${pool.regionName} · ${pool.divisionName}` : 'Pools are not published yet'}</h2>
-          <p>{pool ? 'Standings, fixtures and team members are shown for this pool.' : 'The league header is public, but Rankedin has not published its pools yet.'}</p>
         </div>
         {!!snapshot.pools.length && (
           <label className="league-pool-picker">
@@ -158,23 +155,21 @@ export function LeagueExplorer({ snapshot, isLoadingPool, onPoolChange, onCopySh
         )}
       </section>
 
-      {!pool && <div className="league-empty-state"><CircleHelp size={16} /> This league has no public pool data yet.</div>}
-
       {pool && (
         <>
           <section className="dashboard-grid league-explorer-grid">
             <div className="field-card">
-              <CardHeading kicker="TABLE" title="Pool standings" description="Rankedin’s current or final ordering for this pool." icon={<Trophy size={18} className="card-heading-icon" />} />
+              <CardHeading title="Pool standings" description="Rankedin’s current or final ordering for this pool." icon={<Trophy size={18} className="card-heading-icon" />} />
               <LeagueStandingTable snapshot={snapshot} />
             </div>
             <div className="field-card">
-              <CardHeading kicker="FIXTURES" title="Pool schedule" description="Team matches in chronological order." icon={<CalendarDays size={18} className="card-heading-icon" />} />
+              <CardHeading title="Pool schedule" description="Team matches in chronological order." icon={<CalendarDays size={18} className="card-heading-icon" />} />
               <LeagueFixtureList snapshot={snapshot} />
             </div>
           </section>
 
           <section className="field-card league-teams-card">
-            <CardHeading kicker="TEAMS AND PLAYERS" title="Who is in this pool?" description="Team membership is public context. Open a player or team for the source profile." icon={<Users size={18} className="card-heading-icon" />} />
+            <CardHeading title="Teams and players" icon={<Users size={18} className="card-heading-icon" />} />
             <LeagueTeamGrid snapshot={snapshot} />
           </section>
         </>

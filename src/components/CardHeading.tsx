@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 type CardHeadingProps = {
-  kicker: ReactNode
+  kicker?: ReactNode
   title: ReactNode
   description?: ReactNode
   icon?: ReactNode
@@ -15,7 +15,7 @@ export function CardHeading({ kicker, title, description, icon, tools, className
   return (
     <div className={headingClassName}>
       <div>
-        <div className="section-kicker">{kicker}</div>
+        {kicker !== undefined && <div className="section-kicker">{kicker}</div>}
         <h2>{title}</h2>
         {description !== undefined && <p>{description}</p>}
       </div>

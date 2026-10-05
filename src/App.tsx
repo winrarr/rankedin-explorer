@@ -457,7 +457,14 @@ function ProgressChart({ series }: ProgressChartProps) {
   }, [])
 
   function toggleSeries(className: string) {
-    setHiddenSeries((current) => ({ ...current, [className]: !current[className] }))
+    setHiddenSeries((current) => {
+      const visibleCount = series.filter((item) => !current[item.className]).length
+      if (visibleCount === series.length) {
+        return Object.fromEntries(series.map((item) => [item.className, item.className !== className]))
+      }
+      if (visibleCount === 1 && !current[className]) return {}
+      return { ...current, [className]: !current[className] }
+    })
   }
 
   return (
@@ -622,8 +629,7 @@ function LeagueSeasonComparison({ seasons }: { seasons: LeagueSeasonAnalysis[] }
     <section className="field-card league-comparison-card" aria-label="Lunar League season comparison">
       <div className="card-heading">
         <div>
-          <div className="section-kicker">SEASON COMPARISON</div>
-          <h2>Latest versus previous</h2>
+          <h2>Season comparison</h2>
           <p>{current.name} compared with {previous.name}. Division labels remain categorical.</p>
         </div>
         <History size={18} className="card-heading-icon" />
@@ -652,9 +658,7 @@ function PlayerRecentForm({ analysis, seasons }: { analysis: PlayerAnalysis; sea
     <section className="field-card recent-form-card" aria-label="Recent form">
       <div className="card-heading">
         <div>
-          <div className="section-kicker">RECENT FORM</div>
-          <h2>What happened lately?</h2>
-          <p>Recent finishes and the latest available Lunar League fixtures are kept separate from long-term history.</p>
+          <h2>Recent form</h2>
         </div>
         <Activity size={18} className="card-heading-icon" />
       </div>
@@ -681,7 +685,7 @@ function PlayerRecentForm({ analysis, seasons }: { analysis: PlayerAnalysis; sea
             ))}
             {!leagueFixtures.length && <span className="recent-form-empty">No played league fixtures</span>}
           </div>
-          <small>{latestSeason ? `Newest season · ${latestSeason.divisionName}` : 'No league season found'}</small>
+          {latestSeason && <small>Newest season · {latestSeason.divisionName}</small>}
         </div>
       </div>
     </section>
@@ -880,8 +884,7 @@ function LeagueProgressSection({ seasons, isLoading, error }: LeagueProgressSect
     <section className="field-card league-progress-card" aria-label="Lunar League progress">
       <div className="card-heading">
         <div>
-          <div className="section-kicker">LUNAR LEAGUE PROGRESS</div>
-          <h2>Division history <InfoTip label="About Lunar League progress" message="Divisions are categorical, not numeric. The chart follows the player's division and team standing across each season." /></h2>
+          <h2>Lunar League divisions <InfoTip label="About Lunar League progress" message="Divisions are categorical, not numeric. The chart follows the player's division and team standing across each season." /></h2>
         </div>
       </div>
       {isLoading && !seasons.length && <div className="league-loading"><LoaderCircle className="spin" size={15} /> Reading finished league seasons…</div>}
@@ -963,15 +966,19 @@ function PlayerProgressWorkspace({ profile, analysis, dpfRankings, dpfRankingErr
   const average = points.length ? points.reduce((sum, point) => sum + point.percentage, 0) / points.length : null
   const unavailableCount = analysis ? analysis.events.length - points.length : 0
   const currentDpfRanking = dpfRankings?.[0] ?? null
+  const profileContext = profile
+    ? [profile.homeClubName, profile.countryCode?.toUpperCase()]
+      .filter((value): value is string => Boolean(value))
+      .join(' / ')
+    : ''
 
   return (
     <>
       {profile && (
         <section className="workspace-heading">
           <div>
-            <div className="eyebrow">PLAYER PROGRESS <span className="live-dot" /> LIVE DATA</div>
             <h2>{profile.name}</h2>
-            <p>{`${profile.homeClubName ?? 'Home club unavailable'} / ${profile.countryCode?.toUpperCase() ?? 'Country unavailable'} / ${points.length || 'No'} comparable results`}</p>
+            {profileContext && <p>{profileContext}</p>}
           </div>
           <div className="workspace-actions">
             <button className="text-button share-button" type="button" onClick={onCopyShareLink} disabled={!canShare}>
@@ -1030,7 +1037,6 @@ function PlayerProgressWorkspace({ profile, analysis, dpfRankings, dpfRankingErr
           <section className="field-card progress-card">
             <div className="card-heading">
               <div>
-                <div className="section-kicker">PLACEMENT TIMELINE</div>
                 <h2>Placement timeline</h2>
                 <p>{formatProgressDateRange(points)} <span className="muted-divider">/</span> each point is one finished tournament <span className="inline-guidance">· lower is better <InfoTip label="About placement percentages" message="Placement percentage is standing divided by the finished field size. Solid lines connect results within the same normalized class; dotted lines show direction only and are not forecasts." /></span></p>
               </div>
@@ -1063,7 +1069,6 @@ function PlayerProgressWorkspace({ profile, analysis, dpfRankings, dpfRankingErr
           <section className="field-card progress-results-card">
             <div className="card-heading">
               <div>
-                <div className="section-kicker">RECENT RESULTS</div>
                 <h2>Recent results</h2>
                 <p>{points.length} comparable placements <span className="muted-divider">/</span> {formatProgressDateRange(points)}</p>
               </div>
@@ -1958,8 +1963,7 @@ function App() {
           <div className="preferences-popover">
             <div className="popover-heading">
               <div>
-                <span className="eyebrow">LOCAL ONLY</span>
-                <h3>Small preferences</h3>
+                <h3>Preferences</h3>
               </div>
               <button className="icon-button quiet" type="button" aria-label="Close preferences" onClick={() => setShowPreferences(false)}>
                 <X size={16} />
@@ -2004,14 +2008,13 @@ function App() {
                 onChange={(event) => setPreferences((current) => ({ ...current, showContext: event.target.checked }))}
               />
             </label>
-            <p className="popover-note">Tournament and pair choices are never stored. Player Progress reads up to 25 finished events for a more useful timeline.</p>
+            <p className="popover-note">Tournament and pair choices aren't saved. Player history covers up to 25 finished events.</p>
           </div>
         )}
       </header>
 
       <nav className="workspace-nav" aria-label="Choose workspace">
         <div className="workspace-nav-inner">
-          <span className="workspace-nav-label">WORKSPACE</span>
           <div className="workspace-nav-tabs" role="tablist">
             <button
               className={activeMode === 'tournament' ? 'is-active' : ''}
@@ -2082,7 +2085,7 @@ function App() {
                           void (activeMode === 'tournament' ? analyzeTournament() : activeMode === 'player' ? analyzePlayer() : analyzeLeague())
                         }
                       }}
-                      placeholder={activeMode === 'tournament' ? 'Search by name, URL or ID' : activeMode === 'player' ? 'Search by name, profile URL or R-number' : 'Search league or player name'}
+                      placeholder={activeMode === 'tournament' ? 'Name, URL or ID' : activeMode === 'player' ? 'Name, URL or R-number' : 'League or player name'}
                     />
                     {(activeMode === 'tournament' ? tournamentUrl : activeMode === 'player' ? playerReference : leagueReference) && <button className="clear-input" type="button" aria-label={`Clear ${activeMode} reference`} onClick={clearReference}><X size={14} /></button>}
                   </div>
@@ -2145,7 +2148,6 @@ function App() {
                     {!!leaguePlayerSearch.results.length && (
                       <>
                         <div className="search-section-label">FIND A LUNAR LEAGUE BY PLAYER</div>
-                        <p className="league-search-guidance">Search your name or a teammate to find their current public Lunar League team.</p>
                         <div className="player-search-results" role="listbox" aria-label="Players with Lunar League history">
                           {leaguePlayerSearch.results.map((player) => (
                             <button className="player-search-result" type="button" role="option" key={player.rankedInId} onClick={() => void selectLeaguePlayerSearchResult(player)}>
@@ -2164,9 +2166,6 @@ function App() {
                   <LoaderCircle className="spin" size={16} />
                   <div className="lookup-loading-copy">
                     <strong>{activeMode === 'tournament' ? 'Loading tournament field' : activeMode === 'player' ? 'Finding public profile' : 'Loading Lunar League'}</strong>
-                    <span>{activeMode === 'tournament'
-                      ? 'Finding event details and reading its class roster. This can take a moment.'
-                      : activeMode === 'player' ? 'Resolving the profile before reading tournament and Lunar League history.' : 'Reading league details, pools, standings and fixtures.'}</span>
                   </div>
                 </div>
               )}
@@ -2181,7 +2180,7 @@ function App() {
           <>
             <section className="workspace-heading">
           <div>
-            <div className="eyebrow">CURRENT FIELD <span className="live-dot" /> LIVE DATA</div>
+            <div className="eyebrow">CURRENT FIELD</div>
             <h2>{snapshot.name}</h2>
             <p>{snapshot.location}, {snapshot.country} <span className="muted-divider">/</span> {snapshot.sport} <span className="muted-divider">/</span> {formatDate(snapshot.startDate)}</p>
             <p className="print-report-meta">Tournament overview · {classTitle} · Generated {formatDate(new Date().toISOString())} · rankedin.com/en/tournament/{snapshot.tournamentId}</p>
@@ -2417,7 +2416,6 @@ function App() {
               <div>
                 <div className="section-kicker">PAIR HISTORY</div>
                 <h2>{selectedPair.first.name} + {selectedPair.second.name}</h2>
-                <p>Placements come first. Open a tournament when you want the match-by-match context.</p>
               </div>
               <div className="pair-history-actions">
                 <PairUsButton
@@ -2462,7 +2460,7 @@ function App() {
 
             <section className="privacy-strip">
               <div className="privacy-icon"><Database size={17} /></div>
-              <div><strong>Nothing follows you home.</strong><span>Only small display preferences live in this browser. Tournament and player selections stay in temporary page state.</span></div>
+              <div><strong>Selections aren't saved.</strong><span>Display preferences stay in this browser.</span></div>
               <button className="privacy-link" type="button" onClick={() => setShowPreferences(true)}>Review preferences <ArrowUpRight size={14} /></button>
             </section>
           </>
@@ -2498,7 +2496,7 @@ function App() {
         ) : null}
       </main>
 
-      <footer className="footer"><span className="footer-brand">Rankedin Explorer</span><span className="footer-note">Read-only personal utility <span className="muted-divider">/</span> source data remains with Rankedin</span><a href="https://api.rankedin.com/swagger/v1/swagger.json" target="_blank" rel="noreferrer">API map <ArrowUpRight size={13} /></a></footer>
+      <footer className="footer">Read-only · Public Rankedin data</footer>
     </div>
   )
 }

@@ -161,7 +161,6 @@ export function PlayerHistoryColumn({
             <div>
               <span>{new Date().getFullYear()} DOUBLES</span>
               <strong>{isLoadingDoublesStats ? <LoaderCircle className="spin record-loading" size={15} aria-label="Reading current-year record" /> : formatWinLossRecord(doublesStats?.currentYear)}</strong>
-              <small>current year</small>
             </div>
             <div>
               <span>CAREER DOUBLES</span>
@@ -174,7 +173,6 @@ export function PlayerHistoryColumn({
             <div className="league-membership-heading">
               <div>
                 <div className="section-kicker">CURRENT LUNAR LEAGUE</div>
-                <span>Newest division available in the public data</span>
               </div>
               {leagueDivision === undefined && !isLoadingLeagueDivision && (
                 <button type="button" onClick={() => void loadLeagueDivision()}>Show division</button>
@@ -182,7 +180,7 @@ export function PlayerHistoryColumn({
             </div>
             {isLoadingLeagueDivision && <div className="league-membership-status"><LoaderCircle className="spin" size={13} /> Reading current division…</div>}
             {leagueDivisionError && <div className="league-membership-status league-membership-error"><CircleHelp size={13} /> {leagueDivisionError}</div>}
-            {leagueDivision && <div className="league-membership-list"><div className="league-membership-item"><strong>{leagueDivision.divisionName}</strong><span>current division</span></div></div>}
+            {leagueDivision && <div className="league-membership-list"><div className="league-membership-item"><strong>{leagueDivision.divisionName}</strong><span>division</span></div></div>}
             {leagueDivision === null && <p className="league-membership-empty">No current Lunar League division found.</p>}
           </section>
           <div className="trace-metrics">
