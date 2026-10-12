@@ -29,7 +29,7 @@ React view state also drives:
 - `src/lib/exports.ts` turns the normalized tournament view state into browser downloads. It must not fetch API data or become a second persistence layer.
 - `src/hooks/usePublicSearch.ts` owns the shared debounce, timeout, cancellation and stale-response handling for tournament, player name and Lunar League name searches.
 - `src/lib/preferences.ts` owns the deliberately narrow local persistence policy.
-- `src/App.tsx` owns the cross-screen interaction flow and temporary request state. Focused workspace views such as `PlayerProgressWorkspace` live in `src/components/`, while pure display transformations live in `src/lib/formatters.ts` and `src/lib/fieldBreakdown.ts`.
+- `src/App.tsx` composes the screens and owns cross-screen navigation, preferences and shared actions. `src/hooks/useTournamentWorkspace.ts`, `useTournamentFieldData.ts`, `usePlayerWorkspace.ts` and `useLeagueWorkspace.ts` own their mode-specific request state and stale-response handling. Focused workspace views live in `src/components/`; player charts and tournament field panels are separate components, while reusable progress transformations live in `src/lib/playerProgress.ts`.
 - `src/components/MetricCard.tsx`, `src/components/CardHeading.tsx`, `src/components/RankedinLink.tsx`, `src/components/InfoTip.tsx` and `src/components/LoadingValue.tsx` are shared semantic display primitives. Domain-specific components compose them instead of duplicating their structure.
 - `src/App.css` owns the visual system and responsive layout. Avoid one-off positional fixes; use the existing grid, flex and card primitives.
 - `src/styles/theme.css` is the single source for the light/dark palette and chart colors.
