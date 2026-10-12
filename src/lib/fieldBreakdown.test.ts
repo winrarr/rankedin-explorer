@@ -4,15 +4,15 @@ import { mostCommonRecentClass, summarizeFieldLeagueDivisions } from './fieldBre
 describe('mostCommonRecentClass', () => {
   it('selects the most common recognized class and ignores non-class groups', () => {
     expect(mostCommonRecentClass([
-      { className: 'DPF25 Herrer', kind: 'dpf', averageTopPercent: 0.3, resultCount: 5, playerCount: 3 },
-      { className: 'DPF35 Herrer', kind: 'dpf', averageTopPercent: 0.42, resultCount: 8, playerCount: 8 },
-      { className: 'U14 Drenge', kind: 'junior', averageTopPercent: 0.1, resultCount: 30, playerCount: 30 },
-      { className: 'Lunar League', kind: 'league', averageTopPercent: 0.2, resultCount: 20, playerCount: 20 },
-      { className: 'ABG Open', kind: 'other', averageTopPercent: 0.1, resultCount: 30, playerCount: 30 },
+      { className: 'DPF25 Herrer', kind: 'dpf', averageRelativeFinish: 0.3, resultCount: 5, playerCount: 3 },
+      { className: 'DPF35 Herrer', kind: 'dpf', averageRelativeFinish: 0.42, resultCount: 8, playerCount: 8 },
+      { className: 'U14 Drenge', kind: 'junior', averageRelativeFinish: 0.1, resultCount: 30, playerCount: 30 },
+      { className: 'Lunar League', kind: 'league', averageRelativeFinish: 0.2, resultCount: 20, playerCount: 20 },
+      { className: 'ABG Open', kind: 'other', averageRelativeFinish: 0.1, resultCount: 30, playerCount: 30 },
     ])).toEqual({
       className: 'DPF35 Herrer',
       kind: 'dpf',
-      averageTopPercent: 0.42,
+      averageRelativeFinish: 0.42,
       resultCount: 8,
       playerCount: 8,
     })

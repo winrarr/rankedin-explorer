@@ -3,7 +3,7 @@ import { normalizeCompetitionClassName, type PlayerLeagueDivision } from './rank
 export type FieldClassSummary = {
   className: string
   kind: ReturnType<typeof normalizeCompetitionClassName>['kind']
-  averageTopPercent: number
+  averageRelativeFinish: number
   resultCount: number
   playerCount: number
 }
@@ -19,7 +19,7 @@ export function mostCommonRecentClass(summaries: FieldClassSummary[]) {
     .slice()
     .sort((first, second) => second.playerCount - first.playerCount
       || second.resultCount - first.resultCount
-      || first.averageTopPercent - second.averageTopPercent
+      || second.averageRelativeFinish - first.averageRelativeFinish
       || first.className.localeCompare(second.className))[0] ?? null
 }
 

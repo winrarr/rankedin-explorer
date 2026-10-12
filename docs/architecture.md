@@ -51,7 +51,7 @@ src/lib/rankedin.ts  ── normalized domain types ──>  React view state
 5. For Lunar League, resolve the player's team directly, then load pool standing, team fixtures and individual doubles in parallel within the shared request queue.
 6. For the combined league chart, load the pool fixture list, the league ordering rules and one aggregate standing response per completed fixture. Reconstruct the selected team's rank after each of its own fixtures using all pool fixtures completed by that point, while keeping fixture result, score and opponent on the checkpoint. Show only divisions the player has entered, use the player's first-to-last fixture as each season slot, and compress gaps between chronological slots while preserving fixture order within each slot.
 7. Normalize organizer-entered tournament class labels for chart series while retaining raw labels in the result table; keep league division names categorical and preserve region/pool suffixes as metadata.
-8. Derive tournament placement percentage from standing and field size, using the midpoint for ranged standings.
+8. Derive normalized relative finish from standing and field size, using the midpoint for ranged standings; first is 100% and last is 0%.
 
 Both modes render incomplete records honestly rather than treating missing data as zero.
 

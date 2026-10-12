@@ -81,7 +81,7 @@ These stories describe the Player Progress mode. The initial view supports the p
 P1. As a player, I want to paste my Rankedin profile URL or ID so that I can start from my own history.
 P2. As a player, I want to see my finished tournament placements on a time-based view so that I can understand change over time.
 P3. As a player, I want each normalized level and class combination to have its own visual series so that moving between DPF25 and DPF35 is visible.
-P4. As a player, I want the vertical scale to explain that a lower placement percentage is better so that the chart is not misleading.
+P4. As a player, I want normalized relative finish to show higher percentages for better results so that finishes from different field sizes are comparable.
 P5. As a player, I want each point to show the exact date, event, raw class name, placement and field size so that I can verify the story behind the graph.
 P6. As a player, I want to filter the chart to one or more class series so that sparse or irrelevant history does not overwhelm the view.
 P7. As a player, I want a summary for each series with result count, average, median, best and latest finish so that I can scan the signal without reading every point.

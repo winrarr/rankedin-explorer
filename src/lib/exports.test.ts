@@ -25,7 +25,7 @@ const input: TournamentExportInput = {
   fieldClassSummaries: [{
     className: 'DPF35 Herrer',
     kind: 'dpf',
-    averageTopPercent: .25,
+    averageRelativeFinish: .25,
     resultCount: 2,
     playerCount: 2,
   }],
@@ -83,6 +83,7 @@ describe('tournament exports', () => {
       }],
     })
     expect(report.pairs[0].players[1].recentResults).toBeNull()
+    expect(report.pairs[0].players[0].recentResults?.[0].relativeFinishPercent).toBeCloseTo(11 / 14)
   })
 
   it('creates a spreadsheet-friendly CSV with quoted values', () => {

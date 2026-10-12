@@ -5,15 +5,16 @@ export function FieldClassSummaryGrid({ summaries }: { summaries: FieldClassSumm
   return (
     <div className="field-aggregate-grid">
       {summaries.map((summary) => {
-        const percentage = Math.round(summary.averageTopPercent * 100)
+        const percentage = Math.round(summary.averageRelativeFinish * 100)
         return (
           <article className="field-aggregate-card" key={`${summary.kind}-${summary.className}`}>
             <span className="field-aggregate-class">{summary.className}</span>
-            <strong>Top {percentage}%</strong>
-            <span>{summary.resultCount} results · {summary.playerCount} players</span>
+            <strong>{percentage}%</strong>
+            <span>Relative finish · {summary.resultCount} results · {summary.playerCount} players</span>
             <div className="field-aggregate-scale" aria-hidden="true">
               <span className="field-aggregate-marker" style={{ left: `${percentage}%` }} />
             </div>
+            <div className="field-aggregate-scale-labels" aria-hidden="true"><span>0%</span><span>100%</span></div>
           </article>
         )
       })}

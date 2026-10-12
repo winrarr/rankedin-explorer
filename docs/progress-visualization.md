@@ -15,8 +15,7 @@ Observed data:
 - 22 finished events had a matching class result. Three finished events did not expose a matching result through the current class-result lookup and should be represented as unavailable data, not silently treated as placements.
 - Usable placement dates run from 01/03/2024 to 03/07/2026.
 - Normalized class groups are DPF25 Herrer: 12 results, DPF35 Herrer: 9 results, and DPF50 Herrer: 1 result.
-- Field sizes range from 7 to 16 pairs.
-- Placement percentages range from Top 12.5% to Top 100%. Using placement divided by field size, DPF25 Herrer averages about Top 60%, DPF35 Herrer about Top 62%, and the one DPF50 Herrer result is Top 88%.
+- Field sizes range from 7 to 16 pairs, so raw finishing positions need to be normalized before comparing events.
 
 ## Does the graph make sense?
 
@@ -26,14 +25,14 @@ Yes, with a careful visual treatment. Rasmus has enough results for two useful s
 - There is a long gap between the 2024 and 2025 results.
 - Class names vary substantially in their raw spelling and include organizer-specific draw/session suffixes.
 - Moving from DPF25 to DPF35 changes the difficulty context, so a single undifferentiated line would be misleading.
-- A lower percentage is better, but `1st of 8` is Top 12.5%, not zero; the axis and legend need to explain this clearly.
+- Percentages use normalized relative finish: 100% for first place and 0% for last place, with tied placement ranges scored at their midpoint. A one-pair field has no meaningful comparison and is omitted.
 
 ## Implemented design
 
 The current view uses a single-player timeline scatter plot with optional connecting segments:
 
 1. The x-axis is event date.
-2. The y-axis is finish percentage (`placement / field size`), with Top 0% at the top and Top 100% at the bottom. Label it as “finish percentage — lower is better”.
+2. The y-axis is relative finish (`(field size − midpoint place) / (field size − 1)`), with 100% at the top and 0% at the bottom. Higher is better, and first/last place map to the same endpoints across field sizes.
 3. Each normalized level/class combination gets a color and legend entry.
 4. Each finished placement is a point. Solid lines connect points only within the same series, and dotted lines show a least-squares linear direction for series with at least two dated points. A dotted line is a visual summary, not a forecast.
 5. Hover or tap reveals date, event, raw class label, placement, field size, partner and a link to the source event.

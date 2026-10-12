@@ -14,6 +14,7 @@ import type {
   FieldClassSummary,
   FieldLeagueDivisionCount,
 } from './fieldBreakdown'
+import { relativeFinishPercent } from './placement'
 
 export type TournamentExportInput = {
   snapshot: TournamentSnapshot
@@ -40,7 +41,7 @@ type ExportRecentResult = {
   placementRangeTo: number | null
   placementLabel: string
   fieldSize: number | null
-  placementPercent: number | null
+  relativeFinishPercent: number | null
   partner: string | null
   sourceUrl: string
 }
@@ -109,12 +110,6 @@ export type TournamentExport = {
   pairs: ExportPair[]
 }
 
-function eventPlacementPercent(event: PlayerEventAnalysis) {
-  if (event.standing === null || !event.fieldSize) return null
-  const rangeEnd = event.standingRangeTo ?? event.standing
-  return Math.min(1, Math.max(0, ((event.standing + rangeEnd) / 2) / event.fieldSize))
-}
-
 function exportRecentResult(event: PlayerEventAnalysis): ExportRecentResult {
   return {
     date: event.startDate,
@@ -127,7 +122,7 @@ function exportRecentResult(event: PlayerEventAnalysis): ExportRecentResult {
     placementRangeTo: event.standingRangeTo,
     placementLabel: placementSummaryPosition(event),
     fieldSize: event.fieldSize,
-    placementPercent: eventPlacementPercent(event),
+    relativeFinishPercent: relativeFinishPercent(event),
     partner: event.partner,
     sourceUrl: `https://www.rankedin.com/en/tournament/${event.id}`,
   }

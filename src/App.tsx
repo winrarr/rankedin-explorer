@@ -85,6 +85,7 @@ import {
   ordinalPosition,
   placementSummaryPosition,
 } from './lib/formatters'
+import { relativeFinishPercent } from './lib/placement'
 import { PlayerHistoryColumn } from './components/PlayerHistoryColumn'
 import { LeagueExplorer } from './components/LeagueExplorer'
 import { PairUsButton } from './components/PairUsButton'
@@ -234,19 +235,14 @@ async function settleWithConcurrency<T, R>(
   return results
 }
 
-function placementProgress(event: PlayerEventAnalysis) {
-  if (event.standing === null || !event.fieldSize) return 0.5
-  if (event.fieldSize === 1) return 0
-  return Math.min(1, Math.max(0, (event.standing - 1) / (event.fieldSize - 1)))
-}
-
 function placementGradient(event: PlayerEventAnalysis) {
-  const lowerFinishWeight = Math.round(placementProgress(event) * 100)
-  const higherFinishWeight = 100 - lowerFinishWeight
+  const finish = relativeFinishPercent(event) ?? 0.5
+  const strongerFinishWeight = Math.round(finish * 100)
+  const weakerFinishWeight = 100 - strongerFinishWeight
   return {
-    background: `color-mix(in srgb, var(--sage-soft) ${higherFinishWeight}%, var(--coral-soft) ${lowerFinishWeight}%)`,
-    borderColor: `color-mix(in srgb, var(--sage) ${higherFinishWeight}%, var(--coral) ${lowerFinishWeight}%)`,
-    color: `color-mix(in srgb, var(--sage) ${higherFinishWeight}%, var(--coral) ${lowerFinishWeight}%)`,
+    background: `color-mix(in srgb, var(--sage-soft) ${strongerFinishWeight}%, var(--coral-soft) ${weakerFinishWeight}%)`,
+    borderColor: `color-mix(in srgb, var(--sage) ${strongerFinishWeight}%, var(--coral) ${weakerFinishWeight}%)`,
+    color: `color-mix(in srgb, var(--sage) ${strongerFinishWeight}%, var(--coral) ${weakerFinishWeight}%)`,
   }
 }
 
@@ -286,7 +282,7 @@ const progressSeriesColors = ['var(--sage)', 'var(--blue)', 'var(--coral)', 'var
 function progressPoints(events: PlayerEventAnalysis[]) {
   return events
     .map((event): ProgressPoint | null => {
-      const percentage = averagePlacement(event)
+      const percentage = relativeFinishPercent(event)
       if (percentage === null || !event.className) return null
       return { event, className: compactClassName(event.className), percentage }
     })
@@ -368,13 +364,6 @@ function formatProgressDateRange(points: ProgressPoint[]) {
   return `${formatChartDate(new Date(Math.min(...dates)).toISOString())} – ${formatChartDate(new Date(Math.max(...dates)).toISOString())}`
 }
 
-function averagePlacement(event: PlayerEventAnalysis) {
-  if (event.standing === null || !event.fieldSize) return null
-  const rangeEnd = event.standingRangeTo ?? event.standing
-  const placement = (event.standing + rangeEnd) / 2
-  return Math.min(1, Math.max(0, placement / event.fieldSize))
-}
-
 function summarizeFieldPlacements(analyses: Record<number, PlayerAnalysis | null>) {
   const groups = new Map<string, {
     className: string
@@ -387,7 +376,7 @@ function summarizeFieldPlacements(analyses: Record<number, PlayerAnalysis | null
     if (!analysis) return
 
     fieldPlacementEvents(analysis).forEach((event) => {
-      const percentage = averagePlacement(event)
+      const percentage = relativeFinishPercent(event)
       if (percentage === null) return
 
       const normalizedClass = normalizeCompetitionClassName(event.className)
@@ -407,12 +396,12 @@ function summarizeFieldPlacements(analyses: Record<number, PlayerAnalysis | null
   return Array.from(groups.values(), (group): FieldClassSummary => ({
     className: group.className,
     kind: group.kind,
-    averageTopPercent: group.percentages.reduce((sum, value) => sum + value, 0) / group.percentages.length,
+    averageRelativeFinish: group.percentages.reduce((sum, value) => sum + value, 0) / group.percentages.length,
     resultCount: group.percentages.length,
     playerCount: group.players.size,
   })).sort((first, second) => (
     Number(first.kind === 'other') - Number(second.kind === 'other')
-      || first.averageTopPercent - second.averageTopPercent
+      || second.averageRelativeFinish - first.averageRelativeFinish
   ))
 }
 
@@ -443,7 +432,7 @@ function ProgressChart({ series }: ProgressChartProps) {
   const end = rawEnd + padding
   const range = Math.max(end - start, 1)
   const xPosition = (value: string) => chartLeft + ((new Date(value).getTime() - start) / range) * plotWidth
-  const yPosition = (value: number) => chartTop + value * plotHeight
+  const yPosition = (value: number) => chartTop + (1 - value) * plotHeight
   const yTicks = [0, .25, .5, .75, 1]
   const xTicks = [0, .5, 1]
 
@@ -487,12 +476,12 @@ function ProgressChart({ series }: ProgressChartProps) {
       {!points.length ? (
         <div className="progress-chart-empty">Select a class above to show its results.</div>
       ) : (
-        <svg className="progress-chart-svg" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="Tournament placement timeline">
-          <title>Finished tournament placement timeline</title>
+        <svg className="progress-chart-svg" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="Relative finish timeline, higher percentages are better">
+          <title>Relative finish across finished tournaments</title>
           {yTicks.map((tick) => (
             <g key={tick}>
               <line className="progress-grid-line" x1={chartLeft} x2={chartWidth - chartRight} y1={yPosition(tick)} y2={yPosition(tick)} />
-              <text className="progress-axis-label" x={chartLeft - 11} y={yPosition(tick) + 3} textAnchor="end">Top {Math.round(tick * 100)}%</text>
+              <text className="progress-axis-label" x={chartLeft - 11} y={yPosition(tick) + 3} textAnchor="end">{Math.round(tick * 100)}%</text>
             </g>
           ))}
           {xTicks.map((tick) => {
@@ -527,7 +516,7 @@ function ProgressChart({ series }: ProgressChartProps) {
                     key={point.event.id}
                     r="5"
                   >
-                    <title>{`${formatDate(point.event.startDate)} · ${point.className} · ${placementSummaryPosition(point.event)} of ${point.event.fieldSize ?? '—'} pairs · ${point.event.name}`}</title>
+                    <title>{`${formatDate(point.event.startDate)} · ${point.className} · ${placementSummaryPosition(point.event)} of ${point.event.fieldSize ?? '—'} pairs · ${formatPercent(point.percentage)} relative finish · ${point.event.name}`}</title>
                   </circle>
                 ))}
               </g>
@@ -673,7 +662,7 @@ function PlayerRecentForm({ analysis, seasons }: { analysis: PlayerAnalysis; sea
             ))}
             {!tournamentPoints.length && <span className="recent-form-empty">No comparable finishes</span>}
           </div>
-          <small>Newest first · lower placement is better</small>
+          <small>Higher relative finish is better · newest first</small>
         </div>
         <div className="recent-form-track">
           <span className="recent-form-label">LATEST LEAGUE FIXTURES</span>
@@ -1028,8 +1017,8 @@ function PlayerProgressWorkspace({ profile, analysis, dpfRankings, dpfRankingErr
             />
             <MetricCard icon={<Trophy size={15} />} label="RESULTS CHARTED" value={points.length} detail="finished placements" />
             <MetricCard icon={<Users size={15} />} label="LEVELS IN HISTORY" value={series.length} detail="normalized classes" />
-            <MetricCard icon={<Gauge size={15} />} label="AVERAGE FINISH" value={formatPercent(average)} detail="all comparable results" />
-            <MetricCard icon={<CalendarDays size={15} />} label="LATEST RESULT" value={latestPoint ? formatPercent(latestPoint.percentage) : '—'} detail={latestPoint ? formatCompactDate(latestPoint.event.startDate) : 'no comparable result'} />
+            <MetricCard icon={<Gauge size={15} />} label="AVERAGE RELATIVE FINISH" value={formatPercent(average)} detail="all comparable results" />
+            <MetricCard icon={<CalendarDays size={15} />} label="LATEST RELATIVE FINISH" value={latestPoint ? formatPercent(latestPoint.percentage) : '—'} detail={latestPoint ? formatCompactDate(latestPoint.event.startDate) : 'no comparable result'} />
           </section>
 
           <PlayerRecentForm analysis={analysis} seasons={leagueAnalysis?.seasons ?? []} />
@@ -1037,8 +1026,8 @@ function PlayerProgressWorkspace({ profile, analysis, dpfRankings, dpfRankingErr
           <section className="field-card progress-card">
             <div className="card-heading">
               <div>
-                <h2>Placement timeline</h2>
-                <p>{formatProgressDateRange(points)} <span className="muted-divider">/</span> each point is one finished tournament <span className="inline-guidance">· lower is better <InfoTip label="About placement percentages" message="Placement percentage is standing divided by the finished field size. Solid lines connect results within the same normalized class; dotted lines show direction only and are not forecasts." /></span></p>
+                <h2>Relative finish timeline</h2>
+                <p>{formatProgressDateRange(points)} <span className="muted-divider">/</span> each point is one finished tournament <span className="inline-guidance">· higher is better <InfoTip label="About relative finish" message="First place is 100% and last place is 0%, normalized to the field size. Tied placement ranges use their midpoint. Solid lines connect results within the same normalized class; dotted lines show direction only and are not forecasts." /></span></p>
               </div>
             </div>
             <ProgressChart series={series} />
@@ -1075,7 +1064,7 @@ function PlayerProgressWorkspace({ profile, analysis, dpfRankings, dpfRankingErr
             </div>
             <div className="table-scroll">
               <table className="progress-results-table">
-                <thead><tr><th>DATE</th><th>LEVEL / CLASS</th><th>PLACEMENT</th><th>PARTNER</th><th>EVENT</th></tr></thead>
+                <thead><tr><th>DATE</th><th>LEVEL / CLASS</th><th>RELATIVE FINISH / PLACEMENT</th><th>PARTNER</th><th>EVENT</th></tr></thead>
                 <tbody>
                   {[...points].sort((first, second) => new Date(second.event.startDate).getTime() - new Date(first.event.startDate).getTime()).map((point) => (
                     <tr key={point.event.id}>
@@ -2228,7 +2217,7 @@ function App() {
             label="MOST COMMON RECENT CLASS"
             value={commonRecentClass?.className ?? (isLoadingFieldPlacements ? <LoadingValue /> : '—')}
             detail={commonRecentClass
-              ? `Top ${Math.round(commonRecentClass.averageTopPercent * 100)}% average · ${commonRecentClass.playerCount} players`
+              ? `${Math.round(commonRecentClass.averageRelativeFinish * 100)}% average relative finish · ${commonRecentClass.playerCount} players`
               : 'latest five form results'}
           />
         </section>
@@ -2265,11 +2254,11 @@ function App() {
             </div>
 
             {(fieldPlacementsLoaded || Object.keys(fieldPlacementSummaries).length > 0) && (
-              <section className="field-aggregate" aria-label="Average recent placement by class">
+              <section className="field-aggregate" aria-label="Average recent relative finish by class">
                 <div className="field-aggregate-heading">
                   <div>
                     <div className="section-kicker">RECENT FORM BY CLASS</div>
-                    <p>Average of the latest five finished tournaments for each player <span className="inline-guidance">· lower is better <InfoTip label="About placement percentages" message="Each result is shown as placement divided by the finished field size, so lower percentages mean stronger finishes." /></span></p>
+                    <p>Average of the latest five finished tournaments for each player <span className="inline-guidance">· higher is better <InfoTip label="About relative finish" message="First place is 100% and last place is 0%, normalized to the field size. Tied placement ranges use their midpoint." /></span></p>
                   </div>
                 </div>
                 {fieldClassSummaries.length ? (
