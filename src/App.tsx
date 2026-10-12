@@ -7,7 +7,6 @@ import {
   ChevronDown,
   CircleHelp,
   Copy,
-  Database,
   Download,
   ExternalLink,
   FileJson,
@@ -2452,11 +2451,6 @@ function App() {
           </section>
         )}
 
-            <section className="privacy-strip">
-              <div className="privacy-icon"><Database size={17} /></div>
-              <div><strong>Selections aren't saved.</strong><span>Display preferences stay in this browser.</span></div>
-              <button className="privacy-link" type="button" onClick={() => setShowPreferences(true)}>Review preferences <ArrowUpRight size={14} /></button>
-            </section>
           </>
           ) : null
         ) : activeMode === 'player' ? (
