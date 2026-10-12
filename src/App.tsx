@@ -1349,6 +1349,7 @@ function App() {
     fieldPlacementRequestRef.current += 1
     fieldLeagueRequestRef.current += 1
     setIsAnalyzing(true)
+    setIsLoadingClass(false)
     setError(null)
     setShareCopied(false)
     setSelectedPairId(null)
@@ -1622,13 +1623,16 @@ function App() {
     const nextClass = snapshot.classes.find((item) => item.id === classId)
     if (!nextClass || nextClass.id === snapshot.selectedClass.id) return
 
+    const requestId = tournamentRequestRef.current + 1
+    tournamentRequestRef.current = requestId
     setIsLoadingClass(true)
-    fieldPlacementRequestRef.current += 1
-    fieldLeagueRequestRef.current += 1
     setError(null)
 
     try {
       const participants = await getClassParticipants(snapshot.tournamentId, classId)
+      if (requestId !== tournamentRequestRef.current) return
+      fieldPlacementRequestRef.current += 1
+      fieldLeagueRequestRef.current += 1
       setSnapshot((current) => current ? ({ ...current, selectedClass: nextClass, participants }) : current)
       setSelectedPairId(null)
       setPairHistory(null)
@@ -1648,9 +1652,10 @@ function App() {
       setIsLoadingFieldLeagueDivisions(false)
       updateSharedLocation({ mode: 'tournament', tournament: tournamentUrl, classId: nextClass.id })
     } catch (caught) {
+      if (requestId !== tournamentRequestRef.current) return
       setError(caught instanceof Error ? caught.message : 'This class could not be loaded.')
     } finally {
-      setIsLoadingClass(false)
+      if (requestId === tournamentRequestRef.current) setIsLoadingClass(false)
     }
   }
 
@@ -2248,7 +2253,7 @@ function App() {
                         : fieldDpfRankingsLoaded ? 'Latest 5 + DPF points per player' : fieldPlacementsLoaded ? 'Latest 5 per player' : 'Placement summary unavailable'}
                 </div>
                 <div className="class-picker-wrap">
-                  <select value={snapshot.selectedClass.id} onChange={(event) => void chooseClass(Number(event.target.value))} disabled={isLoadingClass || isLoadingFieldData} aria-label="Choose tournament class">
+                  <select value={snapshot.selectedClass.id} onChange={(event) => void chooseClass(Number(event.target.value))} disabled={isLoadingClass || isAnalyzing} aria-label="Choose tournament class">
                     {snapshot.classes.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
                   </select>
                   {isLoadingClass ? <LoaderCircle className="picker-loader spin" size={15} /> : <ChevronDown className="picker-chevron" size={15} />}
