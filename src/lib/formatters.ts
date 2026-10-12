@@ -34,6 +34,10 @@ export function formatRating(value: number | null) {
   return value === null ? '—' : value.toFixed(2)
 }
 
+export function formatDpfPoints(points: number) {
+  return new Intl.NumberFormat('en-GB', { maximumFractionDigits: 1 }).format(points)
+}
+
 export function initials(name: string) {
   return name
     .split(' ')

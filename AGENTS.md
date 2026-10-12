@@ -4,12 +4,14 @@ Rankedin Explorer is a read-only React/Vite site for comparing public Rankedin t
 
 ## Repository map
 
-- `src/App.tsx` — application composition and user-facing interaction state.
+- `src/App.tsx` — application composition, cross-workspace orchestration and temporary interaction state.
+- `src/components/PlayerProgressWorkspace.tsx` — single-player progress view and chart composition.
 - `src/hooks/usePublicSearch.ts` — shared debounced, cancellable public search lifecycle.
-- `src/lib/rankedin.ts` — Rankedin API client, response normalization and analysis workflow.
+- `src/lib/rankedin.ts` — stable public entry point for the Rankedin client.
+- `src/lib/rankedin/` — shared transport, raw and normalized types, and tournament/player/league API workflows.
 - `src/lib/exports.ts` — browser-only tournament report model and CSV/JSON downloads.
 - `src/lib/preferences.ts` — versioned, lightweight local preference storage.
-- `src/lib/*.test.ts` — focused pure-function tests.
+- `src/App.test.tsx` and `src/lib/*.test.ts` — focused UI-flow and pure-function tests.
 - `docs/` — product scope, architecture, API contract notes, constraints and decisions.
 - `.github/workflows/deploy.yml` — GitHub Pages deployment.
 
@@ -20,7 +22,7 @@ The Rankedin API is the source of truth for live data. Do not hard-code live tou
 - Keep the site read-only; do not add Rankedin mutations or account flows without an explicit product decision.
 - Keep the project database-free. Tournament selections, player selections and reports are temporary page state.
 - Only small display preferences may use `localStorage`; follow the policy in `src/lib/preferences.ts`.
-- Keep API details behind `src/lib/rankedin.ts` so UI code depends on normalized domain types rather than Rankedin's PascalCase payloads.
+- Keep API details behind `src/lib/rankedin.ts` so UI code depends on normalized domain types rather than Rankedin's PascalCase payloads. Keep endpoint-specific work inside the domain modules in `src/lib/rankedin/`.
 - Treat API failures, incomplete events and unpublished results as normal states.
 
 ## Commands

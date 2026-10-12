@@ -31,7 +31,7 @@ The browser client uses the public base URL `https://api.rankedin.com/v1`. API a
 - Match sides include numeric `Player1Id` and `Player2Id` values. The normalized match record retains those opponent IDs so the selected-pair preparation context can check up to five recent event histories and intersect opponents with the current class roster without fetching history for every participant.
 - `GET /Player/GetLastEventsPlayedAsync?...` and `GET /Player/GetPlayerMatchesAsync?...` expose convenient recent-match/profile data, but neither returns the tournament class, final standing and field size needed for placement analysis. Keep using the event standings/results path for that insight.
 
-The implementation and endpoint-specific raw types live in [`src/lib/rankedin.ts`](../src/lib/rankedin.ts). Keep PascalCase API payloads, URL construction and the mixed-case team-league search/fixture payloads there; UI code should consume normalized domain types.
+[`src/lib/rankedin.ts`](../src/lib/rankedin.ts) is the stable client entry point. The implementation lives in [`src/lib/rankedin/`](../src/lib/rankedin/): `request.ts` owns shared transport and caching, `types.ts` owns raw and normalized types, `shared.ts` owns cross-domain normalization, and `tournaments.ts`, `players.ts` and `leagues.ts` own their API workflows. Keep PascalCase payloads and URL construction inside these client modules; UI code should consume normalized domain types through the stable entry point.
 
 ## Interpretation rules
 

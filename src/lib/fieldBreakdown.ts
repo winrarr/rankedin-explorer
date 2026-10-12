@@ -1,4 +1,5 @@
-import { normalizeCompetitionClassName, type PlayerLeagueDivision } from './rankedin'
+import { normalizeCompetitionClassName, type PlayerAnalysis, type PlayerLeagueDivision } from './rankedin'
+import { relativeFinishPercent } from './placement'
 
 export type FieldClassSummary = {
   className: string
@@ -11,6 +12,50 @@ export type FieldClassSummary = {
 export type FieldLeagueDivisionCount = {
   divisionName: string
   playerCount: number
+}
+
+export function summarizeFieldPlacements(analyses: Record<number, PlayerAnalysis | null>) {
+  const groups = new Map<string, {
+    className: string
+    kind: ReturnType<typeof normalizeCompetitionClassName>['kind']
+    percentages: number[]
+    players: Set<number>
+  }>()
+
+  Object.values(analyses).forEach((analysis) => {
+    if (!analysis) return
+
+    analysis.events
+      .filter((event) => event.className)
+      .slice(0, 5)
+      .forEach((event) => {
+        const percentage = relativeFinishPercent(event)
+        if (percentage === null) return
+
+        const normalizedClass = normalizeCompetitionClassName(event.className)
+        const groupKey = `${normalizedClass.kind}:${normalizedClass.name}`
+        const group = groups.get(groupKey) ?? {
+          className: normalizedClass.name,
+          kind: normalizedClass.kind,
+          percentages: [],
+          players: new Set<number>(),
+        }
+        group.percentages.push(percentage)
+        group.players.add(analysis.playerId)
+        groups.set(groupKey, group)
+      })
+  })
+
+  return Array.from(groups.values(), (group): FieldClassSummary => ({
+    className: group.className,
+    kind: group.kind,
+    averageRelativeFinish: group.percentages.reduce((sum, value) => sum + value, 0) / group.percentages.length,
+    resultCount: group.percentages.length,
+    playerCount: group.players.size,
+  })).sort((first, second) => (
+    Number(first.kind === 'other') - Number(second.kind === 'other')
+      || second.averageRelativeFinish - first.averageRelativeFinish
+  ))
 }
 
 export function mostCommonRecentClass(summaries: FieldClassSummary[]) {

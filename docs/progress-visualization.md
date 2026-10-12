@@ -37,9 +37,9 @@ The current view uses a single-player timeline scatter plot with optional connec
 4. Each finished placement is a point. Solid lines connect points only within the same series, and dotted lines show a least-squares linear direction for series with at least two dated points. A dotted line is a visual summary, not a forecast.
 5. Hover or tap reveals date, event, raw class label, placement, field size, partner and a link to the source event.
 6. Summary cards show count, average, median, best, latest and the recent direction for each selected series.
-7. Filters allow all classes, one class, a date range and a recent-result limit. The raw event list remains available below the chart for verification.
+7. The chart legend toggles individual class series, and the complete result table remains below for verification.
 8. Missing results appear in a separate notice or event list so the chart never turns unavailable data into a bad finish.
-9. The chart legend toggles individual series, and the results table links each point back to its Rankedin tournament.
+9. Each result links back to its Rankedin tournament.
 
 This is better described as a timeline with evidence points than as a continuous performance curve. A rolling median or trend line can be considered later, but should not be the default because the sample is sparse and the classes are not equivalent.
 
@@ -61,10 +61,7 @@ This separation keeps two different kinds of evidence honest: tournament charts 
 
 The API client discovers both kinds of history through one shared participated-events request, then uses direct player-to-team league lookups and bounded concurrent fixture enrichment. Transient throttling and network failures are retried with backoff, while partial season cards can render as they arrive.
 
-## Open design decisions before implementation
+## Future considerations
 
-- Whether the first release should accept a profile URL, a Rankedin `R...` ID, or both.
-- Whether “level + class” should normalize to level plus gender (`DPF25 Herrer`) or preserve additional organizer distinctions such as `A`, `B`, speed format and session.
-- Whether the default history should load all paged finished events or start with a bounded recent window.
-- Whether a separate rating-history overlay is useful. It should use a second scale or a separate panel; it should not share the placement percentage axis.
-- How to show a result with a `StandingRangeTo` without hiding the uncertainty.
+- The current view loads up to 25 finished tournament results and 10 Lunar League seasons. A configurable or paginated history window could support longer-term analysis.
+- A rating-history overlay may be useful later, but it should use a separate scale or panel rather than sharing the placement percentage axis.

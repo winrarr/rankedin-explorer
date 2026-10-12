@@ -5,28 +5,36 @@
 Rankedin Explorer is a static React application built with Vite and deployed to GitHub Pages. The browser calls Rankedin's public v1 API directly; there is no application server, database or user account layer.
 
 ```text
-Rankedin API
-     │
+React view state
+     │ client methods / normalized models
      ▼
-src/lib/rankedin.ts  ── normalized domain types ──>  React view state
-                                                        │
-                                                        ├─ temporary tournament exploration
-                                                        ├─ temporary Lunar League exploration
-                                                        ├─ temporary player progress analysis
-                                                        ├─ browser-only report exports
-                                                        └─ small local display preferences
+src/lib/rankedin.ts façade
+     │
+     ├─ tournaments.ts
+     ├─ players.ts
+     ├─ leagues.ts
+     └─ request.ts ──> Rankedin API
+
+React view state also drives:
+     ├─ temporary tournament exploration
+     ├─ temporary Lunar League exploration
+     ├─ temporary player progress analysis
+     ├─ browser-only report exports
+     └─ small local display preferences
 ```
 
 ## Boundaries
 
-- `src/lib/rankedin.ts` owns URLs, raw API payloads, API errors and normalization. It should be the only place that knows Rankedin's PascalCase response shape.
+- `src/lib/rankedin.ts` is the stable public API-client façade. Its `src/lib/rankedin/` modules own URLs, raw payloads, API errors and normalization; keep Rankedin's PascalCase response shape inside that folder.
 - `src/lib/exports.ts` turns the normalized tournament view state into browser downloads. It must not fetch API data or become a second persistence layer.
 - `src/hooks/usePublicSearch.ts` owns the shared debounce, timeout, cancellation and stale-response handling for tournament, player name and Lunar League name searches.
 - `src/lib/preferences.ts` owns the deliberately narrow local persistence policy.
-- `src/App.tsx` owns the cross-screen interaction flow and temporary request state. Focused view pieces live in `src/components/`, while pure display transformations live in `src/lib/formatters.ts` and `src/lib/fieldBreakdown.ts`.
+- `src/App.tsx` owns the cross-screen interaction flow and temporary request state. Focused workspace views such as `PlayerProgressWorkspace` live in `src/components/`, while pure display transformations live in `src/lib/formatters.ts` and `src/lib/fieldBreakdown.ts`.
 - `src/components/MetricCard.tsx`, `src/components/CardHeading.tsx`, `src/components/RankedinLink.tsx`, `src/components/InfoTip.tsx` and `src/components/LoadingValue.tsx` are shared semantic display primitives. Domain-specific components compose them instead of duplicating their structure.
 - `src/App.css` owns the visual system and responsive layout. Avoid one-off positional fixes; use the existing grid, flex and card primitives.
 - `src/styles/theme.css` is the single source for the light/dark palette and chart colors.
+
+The Rankedin client is divided by responsibility: `request.ts` owns the bounded request queue and response cache, `types.ts` owns normalized and raw payload types, `shared.ts` owns cross-domain normalization utilities, and `tournaments.ts`, `players.ts` and `leagues.ts` own their corresponding workflows. UI modules continue to import through `src/lib/rankedin.ts`.
 
 ## Analysis flow
 
