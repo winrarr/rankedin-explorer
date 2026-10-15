@@ -8,6 +8,7 @@ import type { PairRecord, PlayerAnalysis, PlayerLeagueDivision } from '../lib/ra
 import type { FieldDpfLookup } from '../components/tournamentTypes'
 
 const FIELD_PLACEMENT_CONCURRENCY = 3
+const FIELD_PLACEMENT_EVENT_LIMIT = 5
 const FIELD_LEAGUE_CONCURRENCY = 6
 const FIELD_DPF_CONCURRENCY = 3
 
@@ -15,6 +16,7 @@ async function settleWithConcurrency<T, R>(
   items: T[],
   limit: number,
   mapper: (item: T) => Promise<R>,
+  onSettled?: (result: PromiseSettledResult<R>, index: number) => void,
 ) {
   const results: PromiseSettledResult<R>[] = []
   let nextIndex = 0
@@ -28,6 +30,7 @@ async function settleWithConcurrency<T, R>(
       } catch (reason) {
         results[currentIndex] = { status: 'rejected', reason }
       }
+      onSettled?.(results[currentIndex], currentIndex)
     }
   }
 
@@ -67,52 +70,45 @@ export function useTournamentFieldData({ participants, isActive }: UseTournament
     setFieldPlacementSummaries({})
     setFieldPlacementsLoaded(false)
 
-    const results = await settleWithConcurrency(
-      players,
-      FIELD_PLACEMENT_CONCURRENCY,
-      async (player) => {
-        const analysis = await getPlayerAnalysis(player.id, 5, (event) => {
-          if (requestId !== fieldPlacementRequestRef.current) return
-          setFieldPlacementSummaries((current) => {
-            const previous = current[player.id]
-            const events = [...(previous?.events ?? []), event].sort((first, second) => (
-              new Date(second.startDate).getTime() - new Date(first.startDate).getTime()
-            ))
-            return {
-              ...current,
-              [player.id]: {
-                playerId: player.id,
-                playerName: player.name,
-                events,
-              },
-            }
-          })
-        })
-        if (requestId === fieldPlacementRequestRef.current) {
-          setFieldPlacementSummaries((current) => ({
-            ...current,
-            [player.id]: { ...analysis, playerName: player.name },
-          }))
-        }
-        return { player, analysis }
-      },
-    )
-    let failedCount = 0
+    let playersToLoad = players
+    const failedPlayerIds = new Set<number>()
 
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') return
-      const player = players[index]
-      if (requestId === fieldPlacementRequestRef.current) {
-        setFieldPlacementSummaries((current) => ({ ...current, [player.id]: null }))
-      }
-      failedCount += 1
-    })
+    for (let eventCount = 1; eventCount <= FIELD_PLACEMENT_EVENT_LIMIT && playersToLoad.length; eventCount += 1) {
+      if (requestId !== fieldPlacementRequestRef.current) return
+
+      const nextPlayers: typeof players = []
+      await settleWithConcurrency(
+        playersToLoad,
+        FIELD_PLACEMENT_CONCURRENCY,
+        (player) => getPlayerAnalysis(player.id, eventCount),
+        (result, index) => {
+          if (requestId !== fieldPlacementRequestRef.current) return
+          const player = playersToLoad[index]
+
+          if (result.status === 'rejected') {
+            failedPlayerIds.add(player.id)
+            if (eventCount === 1) {
+              setFieldPlacementSummaries((current) => ({ ...current, [player.id]: null }))
+            }
+            return
+          }
+
+          const analysis = { ...result.value, playerName: player.name }
+          setFieldPlacementSummaries((current) => ({ ...current, [player.id]: analysis }))
+          if (analysis.events.length >= eventCount && eventCount < FIELD_PLACEMENT_EVENT_LIMIT) {
+            nextPlayers.push(player)
+          }
+        },
+      )
+
+      playersToLoad = nextPlayers
+    }
 
     if (requestId !== fieldPlacementRequestRef.current) return
 
     setFieldPlacementsLoaded(true)
-    if (failedCount) {
-      setFieldPlacementError(`${failedCount} player ${failedCount === 1 ? 'summary was' : 'summaries were'} unavailable.`)
+    if (failedPlayerIds.size) {
+      setFieldPlacementError(`${failedPlayerIds.size} player ${failedPlayerIds.size === 1 ? 'history was' : 'histories were'} incomplete.`)
     }
     setIsLoadingFieldPlacements(false)
   }

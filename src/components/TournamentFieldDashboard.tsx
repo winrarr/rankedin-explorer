@@ -77,7 +77,7 @@ export function TournamentFieldDashboard({ state, summary, actions }: Tournament
                 <div className={`placement-load-status ${isLoadingFieldData || isLoadingFieldDpfRankings ? 'is-loading' : ''}`} aria-live="polite">
                   {isLoadingFieldData || isLoadingFieldDpfRankings ? <LoaderCircle className="spin" size={14} /> : <History size={14} />}
                   {isLoadingFieldPlacements
-                    ? `Reading latest 5 · ${Object.keys(fieldPlacementSummaries).length}/${snapshot.participants.length * 2} players…`
+                    ? `Reading recent form · ${Object.keys(fieldPlacementSummaries).length}/${snapshot.participants.length * 2} players…`
                     : isLoadingFieldLeagueDivisions
                       ? 'Reading current divisions…'
                       : isLoadingFieldDpfRankings
@@ -101,7 +101,7 @@ export function TournamentFieldDashboard({ state, summary, actions }: Tournament
                 <div className="field-aggregate-heading">
                   <div>
                     <div className="section-kicker">RECENT FORM BY CLASS</div>
-                    <p>Average of the latest five finished tournaments for each player <span className="inline-guidance">· higher is better <InfoTip label="About relative finish" message="First place is 100% and last place is 0%, normalized to the field size. Tied placement ranges use their midpoint." /></span></p>
+                    <p>Average of up to five latest finished tournaments for each player <span className="inline-guidance">· higher is better <InfoTip label="About relative finish" message="First place is 100% and last place is 0%, normalized to the field size. Tied placement ranges use their midpoint." /></span></p>
                   </div>
                 </div>
                 {fieldClassSummaries.length ? (
