@@ -2,7 +2,7 @@
 
 ## Shape
 
-Rankedin Explorer is a static React application built with Vite and deployed to GitHub Pages. The browser calls Rankedin's public v1 API directly; there is no application server, database or user account layer.
+Rankedin Explorer is a static React application built with Vite and deployed to GitHub Pages. The browser calls Rankedin's public v1 API directly; there is no application server, database or application account layer. Optional private analytics use GoatCounter when a site code is configured.
 
 ```text
 React view state
@@ -20,7 +20,8 @@ React view state also drives:
      ├─ temporary Lunar League exploration
      ├─ temporary player progress analysis
      ├─ browser-only report exports
-     └─ small local display preferences
+     ├─ small local display preferences
+     └─ optional aggregate analytics events
 ```
 
 ## Boundaries
@@ -29,6 +30,7 @@ React view state also drives:
 - `src/lib/exports.ts` turns the normalized tournament view state into browser downloads. It must not fetch API data or become a second persistence layer.
 - `src/hooks/usePublicSearch.ts` owns the shared debounce, timeout, cancellation and stale-response handling for tournament, player name and Lunar League name searches.
 - `src/lib/preferences.ts` owns the deliberately narrow local persistence policy.
+- `src/lib/analytics.ts` owns optional GoatCounter setup and generic successful-lookup events. Keep query references and search text out of analytics payloads; deployment setup is documented in `docs/analytics.md`.
 - `src/App.tsx` composes the screens and owns cross-screen navigation, preferences and shared actions. `src/hooks/useTournamentWorkspace.ts`, `useTournamentFieldData.ts`, `usePlayerWorkspace.ts` and `useLeagueWorkspace.ts` own their mode-specific request state and stale-response handling. Focused workspace views live in `src/components/`; player charts and tournament field panels are separate components, while reusable progress transformations live in `src/lib/playerProgress.ts`.
 - `src/components/MetricCard.tsx`, `src/components/CardHeading.tsx`, `src/components/RankedinLink.tsx`, `src/components/InfoTip.tsx` and `src/components/LoadingValue.tsx` are shared semantic display primitives. Domain-specific components compose them instead of duplicating their structure.
 - `src/App.css` owns the visual system and responsive layout. Avoid one-off positional fixes; use the existing grid, flex and card primitives.

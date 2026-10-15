@@ -6,5 +6,6 @@
 - Tournament selections, player selections and generated reports are temporary browser state.
 - PDF, CSV and JSON exports are generated from the loaded browser state without additional API requests; downloaded files are user-owned output, not app persistence.
 - Only lightweight presentation preferences may be stored in `localStorage`, under the versioned key managed by `src/lib/preferences.ts`.
+- Optional GoatCounter analytics may receive aggregate page visits and generic successful-lookup event names. Never send Rankedin identifiers, names or search text; the integration stays disabled until a site code is configured. See [`analytics.md`](./analytics.md).
 - Rankedin's public API is the source of truth. API response fields can be incomplete, unavailable for some events, or changed by Rankedin.
 - Public API calls should remain conservative and cache-friendly; the app must not assume unlimited request capacity.

@@ -15,11 +15,13 @@ const api = vi.hoisted(() => ({
   getRecentPlayerMatches: vi.fn(),
   getTournamentSnapshot: vi.fn(),
 }))
+const analytics = vi.hoisted(() => ({ trackSuccessfulLookup: vi.fn() }))
 
 vi.mock('./lib/rankedin', async (importOriginal) => ({
   ...await importOriginal<typeof import('./lib/rankedin')>(),
   ...api,
 }))
+vi.mock('./lib/analytics', () => analytics)
 
 import App from './App'
 
@@ -125,6 +127,22 @@ describe('tournament class changes', () => {
 
     await waitFor(() => expect((classPicker as HTMLSelectElement).value).toBe('1002'))
     expect(screen.queryByText('Old class')).toBeNull()
+  })
+
+  it('records a tournament lookup after its snapshot loads', async () => {
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Tournament 100' })
+    await waitFor(() => expect(analytics.trackSuccessfulLookup).toHaveBeenCalledWith('tournament'))
+    expect(analytics.trackSuccessfulLookup).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not record a tournament lookup when its snapshot fails', async () => {
+    api.getTournamentSnapshot.mockRejectedValue(new Error('The tournament could not be loaded.'))
+    render(<App />)
+
+    await screen.findByRole('alert')
+    expect(analytics.trackSuccessfulLookup).not.toHaveBeenCalled()
   })
 
   it('ignores a late class response after opening a different tournament', async () => {

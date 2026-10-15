@@ -10,6 +10,7 @@ Rankedin Explorer is a read-only React/Vite site for comparing public Rankedin t
 - `src/lib/rankedin.ts` — stable public entry point for the Rankedin client.
 - `src/lib/rankedin/` — shared transport, raw and normalized types, and tournament/player/league API workflows.
 - `src/lib/exports.ts` — browser-only tournament report model and CSV/JSON downloads.
+- `src/lib/analytics.ts` — optional GoatCounter page visit and successful lookup events; never send Rankedin references.
 - `src/lib/preferences.ts` — versioned, lightweight local preference storage.
 - `src/App.test.tsx` and `src/lib/*.test.ts` — focused UI-flow and pure-function tests.
 - `docs/` — product scope, architecture, API contract notes, constraints and decisions.

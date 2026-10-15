@@ -7,6 +7,7 @@ import {
 } from '../lib/rankedin'
 import type { DpfPlayerRanking, PlayerAnalysis, PlayerLeagueAnalysis, PlayerProfile } from '../lib/rankedin'
 import { isDirectPlayerReference } from '../lib/references'
+import { trackSuccessfulLookup } from '../lib/analytics'
 import type { SharedLocationUpdate } from '../lib/sharedLocation'
 
 const PLAYER_PROGRESS_HISTORY_LIMIT = 25
@@ -65,6 +66,7 @@ export function usePlayerWorkspace({
     try {
       const profile = await getPlayerProfile(normalizedReference)
       if (requestId !== playerRequestRef.current) return
+      trackSuccessfulLookup('player')
       onLocationChange({ mode: 'player', player: profile.rankedInId })
       setPlayerProfile(profile)
       setPlayerAnalysis({ playerId: profile.id, playerName: profile.name, events: [] })

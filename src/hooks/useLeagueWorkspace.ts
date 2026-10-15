@@ -5,6 +5,7 @@ import {
 } from '../lib/rankedin'
 import type { LeagueSnapshot, PlayerSearchResult } from '../lib/rankedin'
 import { isDirectLeagueReference } from '../lib/references'
+import { trackSuccessfulLookup } from '../lib/analytics'
 import type { SharedLocationUpdate } from '../lib/sharedLocation'
 
 type UseLeagueWorkspaceOptions = {
@@ -47,6 +48,7 @@ export function useLeagueWorkspace({
     try {
       const result = await getLeagueSnapshot(normalizedReference, selectedPoolId)
       if (requestId !== leagueRequestRef.current) return
+      trackSuccessfulLookup('league')
       setLeagueSnapshot(result)
       onLocationChange({ mode: 'league', league: normalizedReference, poolId: result.selectedPool?.id })
     } catch (caught) {

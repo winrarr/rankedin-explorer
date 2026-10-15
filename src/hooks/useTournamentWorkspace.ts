@@ -12,6 +12,7 @@ import type {
 import { summarizeFieldOpponents } from '../lib/opponentContext'
 import type { SharedLocationUpdate } from '../lib/sharedLocation'
 import { isDirectTournamentReference } from '../lib/references'
+import { trackSuccessfulLookup } from '../lib/analytics'
 import { useTournamentFieldData } from './useTournamentFieldData'
 import type { PairHistoryState, PairPreparationState } from '../components/tournamentTypes'
 
@@ -80,6 +81,7 @@ export function useTournamentWorkspace({
     try {
       const result = await getTournamentSnapshot(normalizedReference, selectedClassId)
       if (requestId !== tournamentRequestRef.current) return
+      trackSuccessfulLookup('tournament')
       setSnapshot(result)
       onLocationChange({ mode: 'tournament', tournament: normalizedReference, classId: result.selectedClass.id })
       setSearchTerm('')
