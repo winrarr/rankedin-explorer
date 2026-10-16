@@ -31,6 +31,7 @@ jobs:
         run: npm run check
         env:
           VITE_GOATCOUNTER_CODE: ${{ vars.GOATCOUNTER_CODE }}
+          VITE_TALLY_FEEDBACK_FORM_ID: ${{ vars.TALLY_FEEDBACK_FORM_ID }}
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

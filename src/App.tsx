@@ -10,6 +10,7 @@ import { PlayerProgressWorkspace } from './components/PlayerProgressWorkspace'
 import { AppHeader } from './components/AppHeader'
 import { TournamentWorkspace } from './components/TournamentWorkspace'
 import { LeagueExplorer } from './components/LeagueExplorer'
+import { FeedbackDialog } from './components/FeedbackDialog'
 import type { WorkspaceMode } from './lib/references'
 import { readSharedLocation, updateSharedLocation, type SharedLocation } from './lib/sharedLocation'
 import { WorkspaceSearch } from './components/WorkspaceSearch'
@@ -29,6 +30,7 @@ function App() {
   const [playerReference, setPlayerReference] = useState(initialLocation.playerReference)
   const [leagueReference, setLeagueReference] = useState(initialLocation.leagueReference)
   const [shareCopied, setShareCopied] = useState(false)
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false)
   const player = usePlayerWorkspace({
     reference: playerReference,
     onReferenceChange: setPlayerReference,
@@ -232,6 +234,7 @@ function App() {
         onPreferencesChange={setPreferences}
         onReset={resetToHome}
         onModeChange={switchMode}
+        onFeedbackClick={() => setIsFeedbackOpen(true)}
       />
       <main>
         <WorkspaceSearch
@@ -336,7 +339,16 @@ function App() {
         ) : null}
       </main>
 
-      <footer className="footer">Read-only · Public Rankedin data</footer>
+      <footer className="footer">
+        <span>Read-only · Public Rankedin data</span>
+        <button className="footer-feedback" type="button" onClick={() => setIsFeedbackOpen(true)}>Send feedback</button>
+      </footer>
+
+      <FeedbackDialog
+        isOpen={isFeedbackOpen}
+        workspace={activeMode}
+        onClose={() => setIsFeedbackOpen(false)}
+      />
     </div>
   )
 }

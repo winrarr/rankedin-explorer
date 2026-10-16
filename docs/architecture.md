@@ -21,7 +21,8 @@ React view state also drives:
      ├─ temporary player progress analysis
      ├─ browser-only report exports
      ├─ small local display preferences
-     └─ optional aggregate analytics events
+     ├─ optional aggregate analytics events
+     └─ anonymous feedback dialog ──> Tally ──> Make ──> GitHub Issues
 ```
 
 ## Boundaries
@@ -32,6 +33,7 @@ React view state also drives:
 - `src/lib/preferences.ts` owns the deliberately narrow local persistence policy.
 - `src/lib/analytics.ts` owns optional GoatCounter setup and generic successful-lookup events. Keep query references and search text out of analytics payloads; deployment setup is documented in `docs/analytics.md`.
 - `src/App.tsx` composes the screens and owns cross-screen navigation, preferences and shared actions. `src/hooks/useTournamentWorkspace.ts`, `useTournamentFieldData.ts`, `usePlayerWorkspace.ts` and `useLeagueWorkspace.ts` own their mode-specific request state and stale-response handling. Focused workspace views live in `src/components/`; player charts and tournament field panels are separate components, while reusable progress transformations live in `src/lib/playerProgress.ts`.
+- `src/components/FeedbackDialog.tsx` embeds the configured anonymous Tally form. `src/App.tsx` owns its shared open state and passes only the active workspace type as optional context. Tally-to-Make issue creation is configured outside the static app; see `docs/feedback.md`.
 - `src/components/MetricCard.tsx`, `src/components/CardHeading.tsx`, `src/components/RankedinLink.tsx`, `src/components/InfoTip.tsx` and `src/components/LoadingValue.tsx` are shared semantic display primitives. Domain-specific components compose them instead of duplicating their structure.
 - `src/App.css` owns the visual system and responsive layout. Avoid one-off positional fixes; use the existing grid, flex and card primitives.
 - `src/styles/theme.css` is the single source for the light/dark palette and chart colors.

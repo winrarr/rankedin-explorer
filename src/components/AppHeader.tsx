@@ -4,6 +4,7 @@ import {
   ExternalLink,
   GitBranch,
   LineChart,
+  MessageSquareText,
   Settings2,
   Trophy,
   X,
@@ -18,9 +19,10 @@ type AppHeaderProps = {
   onPreferencesChange: Dispatch<SetStateAction<Preferences>>
   onReset: () => void
   onModeChange: (mode: WorkspaceMode) => void
+  onFeedbackClick: () => void
 }
 
-export function AppHeader({ activeMode, preferences, onPreferencesChange, onReset, onModeChange }: AppHeaderProps) {
+export function AppHeader({ activeMode, preferences, onPreferencesChange, onReset, onModeChange, onFeedbackClick }: AppHeaderProps) {
   const [showPreferences, setShowPreferences] = useState(false)
   const setPreferences = onPreferencesChange
   const resetToHome = onReset
@@ -38,6 +40,9 @@ export function AppHeader({ activeMode, preferences, onPreferencesChange, onRese
           <a className="source-link" href="https://www.rankedin.com" target="_blank" rel="noreferrer" aria-label="Open Rankedin">
             <span className="source-link-label">Rankedin source</span> <ExternalLink size={14} />
           </a>
+          <button className="feedback-action" type="button" onClick={onFeedbackClick}>
+            <MessageSquareText size={14} /> <span>Send feedback</span>
+          </button>
           <button
             className="icon-button quiet"
             type="button"
