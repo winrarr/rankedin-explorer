@@ -201,6 +201,10 @@
   font-size: 17px;
   letter-spacing: -0.03em;
 }
+.feedback-form-embed {
+  min-width: 0;
+  padding-inline: 12px;
+}
 .feedback-form-frame {
   display: block;
   width: 100%;
@@ -3254,6 +3258,15 @@ h1 em {
 }
 
 @media (max-width: 360px) {
+  .feedback-dialog {
+    width: calc(100vw - 8px);
+  }
+  .feedback-dialog-header {
+    padding-inline: 8px;
+  }
+  .feedback-form-embed {
+    padding-inline: 0;
+  }
   .source-link {
     gap: 0;
   }

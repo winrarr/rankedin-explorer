@@ -106,17 +106,19 @@ export function FeedbackDialog({ isOpen, workspace, onClose }: FeedbackDialogPro
         </header>
 
         {formUrl ? (
-          <iframe
-            className="feedback-form-frame"
-            data-tally-src={formUrl}
-            title="Anonymous feedback form"
-            loading="lazy"
-            width="100%"
-            height="480"
-            frameBorder={0}
-            marginHeight={0}
-            marginWidth={0}
-          />
+          <div className="feedback-form-embed">
+            <iframe
+              className="feedback-form-frame"
+              data-tally-src={formUrl}
+              title="Anonymous feedback form"
+              loading="lazy"
+              width="100%"
+              height="480"
+              frameBorder={0}
+              marginHeight={0}
+              marginWidth={0}
+            />
+          </div>
         ) : (
           <div className="feedback-form-unavailable" role="status">
             <p>The feedback form is not connected yet.</p>
