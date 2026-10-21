@@ -71,7 +71,7 @@ export function TournamentFieldDashboard({ state, summary, actions }: Tournament
               <div>
                 <div className="section-kicker">FIELD BREAKDOWN</div>
                 <h2>{classTitle}</h2>
-                <p>{snapshot.selectedClass.name.includes('(') ? snapshot.selectedClass.name.match(/\(([^)]+)\)/)?.[1] : 'Selected class'} <span className="muted-divider">/</span> {snapshot.participants.length} pairs visible</p>
+                <p>{snapshot.selectedClass.name.includes('(') ? snapshot.selectedClass.name.match(/\(([^)]+)\)/)?.[1] : 'Selected class'}</p>
               </div>
               <div className="field-card-tools">
                 <div className={`placement-load-status ${isLoadingFieldData || isLoadingFieldDpfRankings ? 'is-loading' : ''}`} aria-live="polite">

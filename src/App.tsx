@@ -339,11 +339,6 @@ function App() {
         ) : null}
       </main>
 
-      <footer className="footer">
-        <span>Read-only · Public Rankedin data</span>
-        <button className="footer-feedback" type="button" onClick={() => setIsFeedbackOpen(true)}>Send feedback</button>
-      </footer>
-
       <FeedbackDialog
         isOpen={isFeedbackOpen}
         workspace={activeMode}

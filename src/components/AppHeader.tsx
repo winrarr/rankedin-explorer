@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import {
   Activity,
-  ExternalLink,
   GitBranch,
   LineChart,
   MessageSquareText,
@@ -37,9 +36,6 @@ export function AppHeader({ activeMode, preferences, onPreferencesChange, onRese
         </a>
 
         <div className="topbar-actions">
-          <a className="source-link" href="https://www.rankedin.com" target="_blank" rel="noreferrer" aria-label="Open Rankedin">
-            <span className="source-link-label">Rankedin source</span> <ExternalLink size={14} />
-          </a>
           <button className="feedback-action" type="button" onClick={onFeedbackClick}>
             <MessageSquareText size={14} /> <span>Send feedback</span>
           </button>

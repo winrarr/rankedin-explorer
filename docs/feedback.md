@@ -1,6 +1,6 @@
 # Feedback collection
 
-The shared header and footer open a Tally form in a dialog. Keep the form to one required long-answer field so visitors can submit free-form feedback without giving their name or email address. The dialog also passes the current workspace (`tournament`, `player`, or `league`) as optional context; it does not attach Rankedin references.
+The shared header opens a Tally form in a dialog. Keep the form to one required long-answer field so visitors can submit free-form feedback without giving their name or email address. The dialog also passes the current workspace (`tournament`, `player`, or `league`) as optional context; it does not attach Rankedin references.
 
 ## Connect the form
 

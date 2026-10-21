@@ -26,7 +26,6 @@
 }
 
 .brand,
-.source-link,
 .outline-button {
   color: inherit;
   text-decoration: none;
@@ -112,18 +111,6 @@
   border-bottom-color: var(--coral);
 }
 
-.source-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 680;
-  white-space: nowrap;
-}
-.source-link:hover {
-  color: var(--blue);
-}
-
 .feedback-action {
   display: inline-flex;
   align-items: center;
@@ -141,8 +128,7 @@
 .feedback-action:hover {
   color: var(--ink);
 }
-.feedback-action:focus-visible,
-.footer-feedback:focus-visible {
+.feedback-action:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 3px;
   border-radius: 4px;
@@ -792,7 +778,7 @@ h1 em {
 }
 .metric-card-dark .metric-label,
 .metric-card-dark span {
-  color: #b9d0d0;
+  color: #dce7e4;
 }
 .metric-label {
   display: flex;
@@ -2528,30 +2514,6 @@ h1 em {
   color: var(--coral);
 }
 
-.footer {
-  width: min(1240px, calc(100% - 64px));
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin: 0 auto;
-  padding: 24px 0 30px;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 10px;
-}
-.footer-feedback {
-  padding: 4px 0;
-  color: var(--blue);
-  border: 0;
-  background: transparent;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-.footer-feedback:hover {
-  color: var(--ink);
-}
 .spin {
   animation: spin 1s linear infinite;
 }
@@ -3231,12 +3193,6 @@ h1 em {
   .topbar-actions {
     gap: 14px;
   }
-  .source-link {
-    font-size: 11px;
-  }
-  .source-link-label {
-    display: none;
-  }
   .feedback-action {
     font-size: 11px;
   }
@@ -3315,11 +3271,6 @@ h1 em {
   .primary-button {
     width: 100%;
     min-height: 46px;
-  }
-  .footer {
-    width: calc(100% - 32px);
-    flex-wrap: wrap;
-    padding: 17px 0 22px;
   }
   .workspace-actions {
     flex-wrap: wrap;
@@ -3514,12 +3465,6 @@ h1 em {
   .feedback-form-embed {
     padding-inline: 0;
   }
-  .source-link {
-    gap: 0;
-  }
-  .source-link-label {
-    display: none;
-  }
 }
 
 @media print {
@@ -3539,7 +3484,6 @@ h1 em {
   .topbar,
   .workspace-nav,
   .hero-grid,
-  .footer,
   .workspace-actions,
   .pair-history-panel,
   .class-picker-wrap,
