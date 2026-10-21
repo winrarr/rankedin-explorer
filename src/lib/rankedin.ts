@@ -16,6 +16,7 @@ export type {
   MatchQuery,
   PlayerEventAnalysis,
   PlayerAnalysis,
+  LeagueMatchPlayer,
   LeagueMatchAnalysis,
   LeagueFixtureAnalysis,
   LeagueStandingSnapshot,

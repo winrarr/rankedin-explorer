@@ -37,3 +37,32 @@ The current season is the primary answer when a user searches their name or team
 - Cross-season ranking or strength scoring.
 - Automatic comparisons between all seasons.
 - Historical data for every player in the system before a user selects a relevant team or player.
+
+## BL-PP-01 — Compare two players' progress
+
+- Status: Backlog
+- Related stories: 27, 29, P2–P11 in [`docs/user-stories.md`](./user-stories.md)
+
+### Goal
+
+Let a user compare the progress histories of two selected public player profiles in one view.
+
+### Rationale
+
+Player Progress currently explains one profile at a time. Comparing two people could help users understand recent form and longer-term results, but the comparison needs its own design because histories can cover different dates, event types, classes and amounts of available data.
+
+### Constraints
+
+- Keep the existing single-player flow easy to use and make the second profile an explicit choice.
+- Use only public Rankedin read endpoints and normalized data behind `src/lib/rankedin.ts`.
+- Keep both profiles and their records clearly attributed; do not imply tournament classes or league divisions are directly equivalent when they are not.
+- Preserve missing, partial and differently scoped histories as such instead of treating them as zero or silently comparing mismatched measures.
+- Do not add accounts, a database or persistent player selections.
+
+### Acceptance criteria
+
+- From Player Progress, a user can choose a second public profile and inspect both players together without losing the first profile's context.
+- The user can replace or remove the second profile and return to the existing single-player view.
+- Each displayed measure identifies which player and time or event scope it represents, and only comparable measures are directly contrasted.
+- Partial or unavailable data for one profile remains visible as a limitation without hiding the other profile's available history.
+- A comparison can be reopened from a share URL using public player references without a database or account.

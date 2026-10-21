@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  ArrowUpRight,
   CircleHelp,
   GitBranch,
   LoaderCircle,
@@ -24,6 +25,7 @@ import {
   type WorkspaceMode,
 } from '../lib/references'
 import { usePublicSearch } from '../hooks/usePublicSearch'
+import { ExplorerPlayerLink } from './ExplorerPlayerLink'
 
 type WorkspaceSearchProps = {
   mode: WorkspaceMode
@@ -219,12 +221,17 @@ export function WorkspaceSearch({
                     {playerSearch.error && <p className="player-search-status player-search-status-error"><CircleHelp size={13} /> {playerSearch.error}</p>}
                     {!playerSearch.isSearching && !playerSearch.error && playerReference.trim().length >= 2 && !isDirectPlayerReference(playerReference) && !playerSearch.results.length && <p className="player-search-status">No public players matched that name.</p>}
                     {!!playerSearch.results.length && (
-                      <div className="player-search-results" role="listbox" aria-label="Player search results">
+                      <div className="player-search-results" role="group" aria-label="Player search results">
                         {playerSearch.results.map((player) => (
-                          <button className="player-search-result" type="button" role="option" key={player.rankedInId} onClick={() => selectPlayerSearchResult(player)}>
-                            <span className="player-search-result-name">{player.name}</span>
-                            <span className="player-search-result-id">{player.rankedInId}</span>
-                          </button>
+                          <div className="player-search-result-row" key={player.rankedInId}>
+                            <button className="player-search-result" type="button" onClick={() => selectPlayerSearchResult(player)}>
+                              <span className="player-search-result-name">{player.name}</span>
+                              <span className="player-search-result-id">{player.rankedInId}</span>
+                            </button>
+                            <ExplorerPlayerLink className="player-search-open-link" rankedInId={player.rankedInId} name={player.name}>
+                              <ArrowUpRight size={14} aria-hidden="true" />
+                            </ExplorerPlayerLink>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -250,12 +257,17 @@ export function WorkspaceSearch({
                     {!!leaguePlayerSearch.results.length && (
                       <>
                         <div className="search-section-label">FIND A LUNAR LEAGUE BY PLAYER</div>
-                        <div className="player-search-results" role="listbox" aria-label="Players with Lunar League history">
+                        <div className="player-search-results" role="group" aria-label="Players with Lunar League history">
                           {leaguePlayerSearch.results.map((player) => (
-                            <button className="player-search-result" type="button" role="option" key={player.rankedInId} onClick={() => void selectLeaguePlayerSearchResult(player)}>
-                              <span className="player-search-result-name">{player.name}</span>
-                              <span className="player-search-result-id">Find current Lunar League</span>
-                            </button>
+                            <div className="player-search-result-row" key={player.rankedInId}>
+                              <button className="player-search-result" type="button" onClick={() => void selectLeaguePlayerSearchResult(player)}>
+                                <span className="player-search-result-name">{player.name}</span>
+                                <span className="player-search-result-id">Find current Lunar League</span>
+                              </button>
+                              <ExplorerPlayerLink className="player-search-open-link" rankedInId={player.rankedInId} name={player.name}>
+                                <ArrowUpRight size={14} aria-hidden="true" />
+                              </ExplorerPlayerLink>
+                            </div>
                           ))}
                         </div>
                       </>

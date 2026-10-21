@@ -237,8 +237,14 @@ function leagueSideHasPlayer(side: RawLeagueSide, playerId: number) {
   return side.player1Id === playerId || side.player2Id === playerId
 }
 
-function leaguePartner(side: RawLeagueSide, playerId: number) {
-  return side.player1Id === playerId ? side.player2Name : side.name
+function leagueSidePlayers(side: RawLeagueSide) {
+  return [
+    { id: side.player1Id, name: side.name, rankedInId: rankedInIdFromPlayerUrl(side.player1Url ?? '') },
+    { id: side.player2Id, name: side.player2Name, rankedInId: rankedInIdFromPlayerUrl(side.player2Url ?? '') },
+  ].flatMap((player) => {
+    const name = player.name?.trim()
+    return name ? [{ ...player, name }] : []
+  })
 }
 
 function formatLeagueMatchScore(match: RawLeagueDouble) {
@@ -253,13 +259,14 @@ function formatLeagueMatchScore(match: RawLeagueDouble) {
   return sets?.length ? sets.join('  ') : `${score.firstParticipantScore}-${score.secondParticipantScore}`
 }
 
-function normalizeLeagueMatch(match: RawLeagueDouble, playerId: number): LeagueMatchAnalysis | null {
+export function normalizeLeagueMatch(match: RawLeagueDouble, playerId: number): LeagueMatchAnalysis | null {
   const playerOnChallenger = leagueSideHasPlayer(match.challenger, playerId)
   const playerOnChallenged = leagueSideHasPlayer(match.challenged, playerId)
   if (!playerOnChallenger && !playerOnChallenged) return null
 
   const currentSide = playerOnChallenger ? match.challenger : match.challenged
   const opponentSide = playerOnChallenger ? match.challenged : match.challenger
+  const partner = leagueSidePlayers(currentSide).find((player) => player.id !== playerId)
   const hasScore = match.matchResult?.hasScore ?? Boolean(match.matchResult?.score)
   const winner = match.matchResult?.score?.isFirstParticipantWinner
 
@@ -267,8 +274,8 @@ function normalizeLeagueMatch(match: RawLeagueDouble, playerId: number): LeagueM
     id: match.id,
     date: match.date,
     round: null,
-    partner: leaguePartner(currentSide, playerId),
-    opponents: [opponentSide.name, opponentSide.player2Name].filter(Boolean),
+    partner: partner ? { name: partner.name, rankedInId: partner.rankedInId } : null,
+    opponents: leagueSidePlayers(opponentSide).map(({ name, rankedInId }) => ({ name, rankedInId })),
     won: hasScore && winner !== undefined
       ? playerOnChallenger ? winner : !winner
       : null,

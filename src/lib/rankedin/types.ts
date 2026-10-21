@@ -135,12 +135,17 @@ export type PlayerAnalysis = {
   events: PlayerEventAnalysis[]
 }
 
+export type LeagueMatchPlayer = {
+  name: string
+  rankedInId: string | null
+}
+
 export type LeagueMatchAnalysis = {
   id: number
   date: string
   round: number | null
-  partner: string
-  opponents: string[]
+  partner: LeagueMatchPlayer | null
+  opponents: LeagueMatchPlayer[]
   won: boolean | null
   played: boolean
   score: string
@@ -577,10 +582,12 @@ export type RawTeamMatchesResponse = {
 }
 
 export type RawLeagueSide = {
-  name: string
-  player2Name: string
+  name: string | null
+  player2Name: string | null
   player1Id: number
   player2Id: number
+  player1Url?: string | null
+  player2Url?: string | null
 }
 
 export type RawLeagueDouble = {

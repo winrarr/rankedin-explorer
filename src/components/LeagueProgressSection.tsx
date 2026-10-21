@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import {
   Activity,
   ArrowUpRight,
@@ -20,6 +21,7 @@ import { placementGradient } from '../lib/placement'
 import { leagueDivisionIndex } from '../lib/fieldBreakdown'
 import { LeagueProgressChart } from './LeagueStandingChart'
 import { progressPoints } from '../lib/playerProgress'
+import { ExplorerPlayerLink } from './ExplorerPlayerLink'
 
 function leagueSeasonMatches(season: LeagueSeasonAnalysis) {
   return season.fixtures.flatMap((fixture) => fixture.matches)
@@ -190,7 +192,31 @@ export function LeagueProgressSection({ seasons, isLoading, error }: LeagueProgr
                       {season.fixtures.map((fixture) => (
                         <div className="league-fixture" key={fixture.id}>
                           <span className={`league-fixture-result ${fixture.won === true ? 'win' : fixture.won === false ? 'loss' : ''}`}>{fixture.won === true ? 'W' : fixture.won === false ? 'L' : '—'}</span>
-                          <span className="league-fixture-info"><strong>{formatCompactDate(fixture.date)} · round {fixture.round ?? '—'}</strong><span>vs {fixture.opponentTeam} · {fixture.teamScore ?? '—'}–{fixture.opponentScore ?? '—'} · {fixture.matches.length} personal {fixture.matches.length === 1 ? 'match' : 'matches'}</span></span>
+                          <div className="league-fixture-main">
+                            <span className="league-fixture-info"><strong>{formatCompactDate(fixture.date)} · round {fixture.round ?? '—'}</strong><span>vs {fixture.opponentTeam} · {fixture.teamScore ?? '—'}–{fixture.opponentScore ?? '—'} · {fixture.matches.length} personal {fixture.matches.length === 1 ? 'match' : 'matches'}</span></span>
+                            {!!fixture.matches.length && (
+                              <details className="league-individual-matches">
+                                <summary><span>Individual matches</span><span>{fixture.matches.length}</span></summary>
+                                <div className="league-individual-match-list">
+                                  {fixture.matches.map((match) => (
+                                    <div className="league-individual-match" key={match.id}>
+                                      <span className={`league-individual-match-result ${match.won === true ? 'win' : match.won === false ? 'loss' : ''}`}>{match.won === true ? 'W' : match.won === false ? 'L' : '—'}</span>
+                                      <div className="league-individual-match-info">
+                                        <span>{match.partner ? <>With <ExplorerPlayerLink rankedInId={match.partner.rankedInId} name={match.partner.name}>{match.partner.name}</ExplorerPlayerLink></> : 'Partner unavailable'}</span>
+                                        <span>{match.opponents.length ? <>vs {match.opponents.map((opponent, index) => (
+                                          <Fragment key={`${opponent.rankedInId ?? opponent.name}-${index}`}>
+                                            {index > 0 && ' + '}
+                                            <ExplorerPlayerLink rankedInId={opponent.rankedInId} name={opponent.name}>{opponent.name}</ExplorerPlayerLink>
+                                          </Fragment>
+                                        ))}</> : 'Opponent unavailable'}</span>
+                                      </div>
+                                      <span className="league-individual-match-score">{match.score}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </details>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
