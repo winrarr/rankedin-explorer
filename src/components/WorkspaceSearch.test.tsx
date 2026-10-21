@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const api = vi.hoisted(() => ({
+  getPlayerDpfRankings: vi.fn(),
   getPlayerProfile: vi.fn(),
   searchPlayersByName: vi.fn(),
   searchTeamLeaguesByName: vi.fn(),
@@ -47,6 +48,15 @@ describe('WorkspaceSearch player results', () => {
       countryCode: 'DK',
       homeClubName: 'North Club',
     })
+    api.getPlayerDpfRankings.mockResolvedValue([{
+      points: 1623.4,
+      position: 8,
+      ageGroup: 'Men-Main',
+      matchType: 'Men doubles',
+      rankingDate: '2026-09-21T00:00:00',
+      rankingName: 'Dansk Padel Forbunds rangliste',
+      rankingUrl: '/en/ranking/2032/dansk-padel-forbunds-rangliste',
+    }])
     api.searchTeamLeaguesByName.mockResolvedValue([])
     api.searchTournamentsByName.mockResolvedValue([])
   })
@@ -59,6 +69,7 @@ describe('WorkspaceSearch player results', () => {
 
     await screen.findByRole('group', { name: 'Player search results' })
     await screen.findByText('North Club')
+    await screen.findByText('DPF 1,623.4')
     expect(screen.getByText('DK')).toBeTruthy()
     const openLink = screen.getByRole('link', { name: 'Open Player Example in Rankedin Explorer in a new tab' })
     expect(openLink.getAttribute('href')).toBe('?mode=player&player=R000000001')
@@ -77,6 +88,15 @@ describe('WorkspaceSearch player results', () => {
     expect(openLink.getAttribute('href')).toBe('?mode=player&player=R000000001')
     expect(openLink.getAttribute('target')).toBe('_blank')
     await screen.findByText('North Club')
+    await screen.findByText('DPF 1,623.4')
+  })
+
+  it('shows when a search result has no current DPF ranking', async () => {
+    api.getPlayerDpfRankings.mockResolvedValue([])
+    renderSearch('player')
+    fireEvent.focus(screen.getByRole('textbox', { name: 'Find a public player' }))
+
+    expect(await screen.findByText('No DPF rank')).toBeTruthy()
   })
 
   it('moves through search results with arrow keys, selects with Enter, and closes with Escape', async () => {

@@ -212,6 +212,7 @@ async function searchDpfRankingForPlayer(
   rankingUrl: string,
   rankingType: 3 | 4,
   ageGroup: number,
+  signal?: AbortSignal,
 ) {
   const name = player.name.trim()
   const normalizedName = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
@@ -234,6 +235,7 @@ async function searchDpfRankingForPlayer(
         Skip: 0,
         Take: 100,
       })}`,
+      signal,
     )
     const matches = normalizeDpfRankingEntries(response.Payload ?? [], player.rankedInId, rankingUrl)
     if (matches.length) return matches
@@ -244,6 +246,7 @@ async function searchDpfRankingForPlayer(
 
 async function loadDpfPlayerRankings(
   player: Pick<PlayerProfile, 'id' | 'rankedInId' | 'name' | 'age'>,
+  signal?: AbortSignal,
 ): Promise<DpfPlayerRanking[]> {
   const ranking = await getDpfRankingReference()
   if (!ranking) return []
@@ -253,7 +256,7 @@ async function loadDpfPlayerRankings(
     [4, dpfAgeGroup(player.age, true)],
   ]
   let lookups = await Promise.allSettled(rankedAgeGroups.map(([rankingType, ageGroup]) => (
-    searchDpfRankingForPlayer(player, ranking.id, ranking.url, rankingType, ageGroup)
+    searchDpfRankingForPlayer(player, ranking.id, ranking.url, rankingType, ageGroup, signal)
   )))
   let rankings = lookups.flatMap((lookup) => lookup.status === 'fulfilled' ? lookup.value : [])
 
@@ -261,8 +264,8 @@ async function loadDpfPlayerRankings(
     ageGroup !== (index === 0 ? 82 : 83)
   ))) {
     lookups = await Promise.allSettled([
-      searchDpfRankingForPlayer(player, ranking.id, ranking.url, 3, 82),
-      searchDpfRankingForPlayer(player, ranking.id, ranking.url, 4, 83),
+      searchDpfRankingForPlayer(player, ranking.id, ranking.url, 3, 82, signal),
+      searchDpfRankingForPlayer(player, ranking.id, ranking.url, 4, 83, signal),
     ])
     rankings = lookups.flatMap((lookup) => lookup.status === 'fulfilled' ? lookup.value : [])
   }
@@ -278,13 +281,16 @@ async function loadDpfPlayerRankings(
 
 export function getPlayerDpfRankings(
   player: Pick<PlayerProfile, 'id' | 'rankedInId' | 'name' | 'age'> | PlayerRecord,
+  signal?: AbortSignal,
 ): Promise<DpfPlayerRanking[]> {
   const age = 'age' in player ? player.age : null
   const cacheKey = `${player.id}:${age ?? 'unknown'}`
-  const cached = dpfPlayerRankingCache.get(cacheKey)
+  const cached = signal ? undefined : dpfPlayerRankingCache.get(cacheKey)
   if (cached) return cached
 
-  const pending = loadDpfPlayerRankings({ ...player, age })
+  const pending = loadDpfPlayerRankings({ ...player, age }, signal)
+  if (signal) return pending
+
   dpfPlayerRankingCache.set(cacheKey, pending)
   pending.catch(() => {
     if (dpfPlayerRankingCache.get(cacheKey) === pending) dpfPlayerRankingCache.delete(cacheKey)

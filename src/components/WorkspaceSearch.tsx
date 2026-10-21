@@ -9,11 +9,13 @@ import {
   X,
 } from 'lucide-react'
 import type {
+  DpfPlayerRanking,
   LeagueSearchResult,
   PlayerSearchResult,
   TournamentSearchResult,
 } from '../lib/rankedin'
 import {
+  getPlayerDpfRankings,
   getPlayerProfile,
   searchPlayersByName,
   searchTeamLeaguesByName,
@@ -27,6 +29,40 @@ import {
 } from '../lib/references'
 import { usePublicSearch } from '../hooks/usePublicSearch'
 import { ExplorerPlayerLink } from './ExplorerPlayerLink'
+import { formatDpfPoints } from '../lib/formatters'
+
+type PlayerSearchDetails = {
+  countryCode: string | null
+  homeClubName: string | null
+  dpfRanking: DpfPlayerRanking | null
+  dpfStatus: 'loading' | 'loaded' | 'unavailable'
+}
+
+function PlayerSearchResultMeta({ details }: { details: PlayerSearchDetails }) {
+  const ranking = details.dpfRanking
+  const rankingContext = ranking?.ageGroup ?? ranking?.matchType
+
+  return (
+    <span className="player-search-result-meta">
+      {details.homeClubName && <span className="player-search-result-club">{details.homeClubName}</span>}
+      {details.countryCode && <span className="player-search-result-country">{details.countryCode.toUpperCase()}</span>}
+      {details.dpfStatus === 'loading' && <span className="player-search-result-dpf-muted">DPF points…</span>}
+      {details.dpfStatus === 'unavailable' && <span className="player-search-result-dpf-muted">DPF unavailable</span>}
+      {details.dpfStatus === 'loaded' && ranking && (
+        <span
+          className="player-search-result-dpf"
+          title={`${rankingContext} · rank ${ranking.position}`}
+          aria-label={`${formatDpfPoints(ranking.points)} current DPF points, rank ${ranking.position}`}
+        >DPF {formatDpfPoints(ranking.points)}</span>
+      )}
+      {details.dpfStatus === 'loaded' && !ranking && (
+        <span className="player-search-result-dpf-muted" title="No current DPF points" aria-label="No current DPF points">
+          No DPF rank
+        </span>
+      )}
+    </span>
+  )
+}
 
 type WorkspaceSearchProps = {
   mode: WorkspaceMode
@@ -75,7 +111,7 @@ export function WorkspaceSearch({
   const searchAnchorRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const suppressSearchOnFocusRef = useRef(false)
-  const [playerSearchDetails, setPlayerSearchDetails] = useState<Record<string, { countryCode: string | null; homeClubName: string | null }>>({})
+  const [playerSearchDetails, setPlayerSearchDetails] = useState<Record<string, PlayerSearchDetails>>({})
   const activeMode = mode
   const tournamentUrl = references.tournament
   const playerReference = references.player
@@ -128,7 +164,16 @@ export function WorkspaceSearch({
     const controller = new AbortController()
     const rankedInIds = playerSearchResultIds.split('|')
     let nextIndex = 0
-    setPlayerSearchDetails({})
+    const initialDetails: Record<string, PlayerSearchDetails> = {}
+    rankedInIds.forEach((rankedInId) => {
+      initialDetails[rankedInId] = {
+        countryCode: null,
+        homeClubName: null,
+        dpfRanking: null,
+        dpfStatus: 'loading',
+      }
+    })
+    setPlayerSearchDetails(initialDetails)
 
     async function loadDetails() {
       const workers = Array.from({ length: Math.min(3, rankedInIds.length) }, async () => {
@@ -142,10 +187,37 @@ export function WorkspaceSearch({
             if (controller.signal.aborted) return
             setPlayerSearchDetails((current) => ({
               ...current,
-              [rankedInId]: { countryCode: profile.countryCode, homeClubName: profile.homeClubName },
+              [rankedInId]: {
+                ...current[rankedInId],
+                countryCode: profile.countryCode,
+                homeClubName: profile.homeClubName,
+              },
             }))
+
+            try {
+              const rankings = await getPlayerDpfRankings(profile, controller.signal)
+              if (controller.signal.aborted) return
+              setPlayerSearchDetails((current) => ({
+                ...current,
+                [rankedInId]: {
+                  ...current[rankedInId],
+                  dpfRanking: rankings[0] ?? null,
+                  dpfStatus: 'loaded',
+                },
+              }))
+            } catch {
+              if (controller.signal.aborted) return
+              setPlayerSearchDetails((current) => ({
+                ...current,
+                [rankedInId]: { ...current[rankedInId], dpfStatus: 'unavailable' },
+              }))
+            }
           } catch {
-            // Search remains useful when optional profile details are unavailable.
+            if (controller.signal.aborted) return
+            setPlayerSearchDetails((current) => ({
+              ...current,
+              [rankedInId]: { ...current[rankedInId], dpfStatus: 'unavailable' },
+            }))
           }
         }
       })
@@ -331,12 +403,7 @@ export function WorkspaceSearch({
                           <div className="player-search-result-row" key={player.rankedInId}>
                             <button className="player-search-result" type="button" onClick={() => selectPlayerSearchResult(player)}>
                               <span className="player-search-result-name">{player.name}</span>
-                              {playerSearchDetails[player.rankedInId] && (
-                                <span className="player-search-result-meta">
-                                  {playerSearchDetails[player.rankedInId].homeClubName && <span className="player-search-result-club">{playerSearchDetails[player.rankedInId].homeClubName}</span>}
-                                  {playerSearchDetails[player.rankedInId].countryCode && <span className="player-search-result-country">{playerSearchDetails[player.rankedInId].countryCode?.toUpperCase()}</span>}
-                                </span>
-                              )}
+                              {playerSearchDetails[player.rankedInId] && <PlayerSearchResultMeta details={playerSearchDetails[player.rankedInId]} />}
                               <span className="player-search-result-id">{player.rankedInId}</span>
                             </button>
                             <ExplorerPlayerLink className="player-search-open-link" rankedInId={player.rankedInId} name={player.name}>
@@ -373,12 +440,7 @@ export function WorkspaceSearch({
                             <div className="player-search-result-row" key={player.rankedInId}>
                               <button className="player-search-result" type="button" onClick={() => void selectLeaguePlayerSearchResult(player)}>
                                 <span className="player-search-result-name">{player.name}</span>
-                                {playerSearchDetails[player.rankedInId] && (
-                                  <span className="player-search-result-meta">
-                                    {playerSearchDetails[player.rankedInId].homeClubName && <span className="player-search-result-club">{playerSearchDetails[player.rankedInId].homeClubName}</span>}
-                                    {playerSearchDetails[player.rankedInId].countryCode && <span className="player-search-result-country">{playerSearchDetails[player.rankedInId].countryCode?.toUpperCase()}</span>}
-                                  </span>
-                                )}
+                                {playerSearchDetails[player.rankedInId] && <PlayerSearchResultMeta details={playerSearchDetails[player.rankedInId]} />}
                                 <span className="player-search-result-id">Find current Lunar League</span>
                               </button>
                               <ExplorerPlayerLink className="player-search-open-link" rankedInId={player.rankedInId} name={player.name}>

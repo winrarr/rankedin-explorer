@@ -577,6 +577,17 @@ h1 em {
 .player-search-result-country {
   flex: none;
 }
+.player-search-result-dpf {
+  flex: none;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+.player-search-result-dpf-muted {
+  flex: none;
+  color: var(--muted);
+  font-weight: 550;
+}
 .search-section-label {
   margin: 12px 2px 7px;
   color: var(--coral);
@@ -3202,6 +3213,17 @@ h1 em {
 }
 
 @media (max-width: 620px) {
+  .player-search-result-meta {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .player-search-result-club {
+    flex: 1 1 auto;
+  }
+  .player-search-result-dpf,
+  .player-search-result-dpf-muted {
+    flex-basis: 100%;
+  }
   .topbar {
     width: calc(100% - 32px);
     height: 70px;
