@@ -124,6 +124,7 @@ export type PlayerEventAnalysis = {
   ratingEnd: number | null
   rankingPoints: number | null
   partner: string | null
+  partnerRankedInId: string | null
   matchQuery: MatchQuery | null
   matches: MatchRecord[]
 }
@@ -229,6 +230,7 @@ export type LeaguePool = {
 export type LeagueTeamPlayer = {
   name: string
   url: string
+  rankedInId: string | null
   countryCode: string | null
   isCaptain: boolean
   rating: number | null

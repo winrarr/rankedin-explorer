@@ -7,6 +7,7 @@ import type {
 import { InfoTip } from './InfoTip'
 import { PairUsButton } from './PairUsButton'
 import { RankedinLink } from './RankedinLink'
+import { ExplorerPlayerLink } from './ExplorerPlayerLink'
 import {
   compactClassName,
   formatCompactDate,
@@ -77,8 +78,12 @@ export function TournamentRosterTable({ participants, field, pair, actions }: To
                         key={pair.id}
                         tabIndex={0}
                         aria-label={`View history for ${pair.first.name} and ${pair.second.name}`}
-                        onClick={() => onInspectPair(pair)}
+                        onClick={(event) => {
+                          if (event.target instanceof Element && event.target.closest('a, button')) return
+                          onInspectPair(pair)
+                        }}
                         onKeyDown={(event) => {
+                          if (event.target !== event.currentTarget) return
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault()
                             onInspectPair(pair)
@@ -89,8 +94,8 @@ export function TournamentRosterTable({ participants, field, pair, actions }: To
                           <div className="pair-cell">
                             <span className="pair-index">{String(index + 1).padStart(2, '0')}</span>
                             <div>
-                              <strong>{pair.first.name}</strong>
-                              <span>{pair.second.name}</span>
+                              <ExplorerPlayerLink rankedInId={pair.first.rankedInId} name={pair.first.name}><strong>{pair.first.name}</strong></ExplorerPlayerLink>
+                              <ExplorerPlayerLink rankedInId={pair.second.rankedInId} name={pair.second.name}>{pair.second.name}</ExplorerPlayerLink>
                               <PairUsButton
                                 pair={pair}
                                 selected={pair.id === usPairId}
@@ -112,7 +117,7 @@ export function TournamentRosterTable({ participants, field, pair, actions }: To
                               return (
                                 <div className="field-placement-player" key={player.id}>
                                   <div className="field-placement-player-name">
-                                    <span className="field-placement-name">{player.name}</span>
+                                    <ExplorerPlayerLink className="field-placement-name" rankedInId={player.rankedInId} name={player.name}>{player.name}</ExplorerPlayerLink>
                                     {dpfRanking ? (
                                       <RankedinLink
                                         className="field-dpf-summary"

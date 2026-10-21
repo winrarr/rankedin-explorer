@@ -3,6 +3,7 @@ import type { PairRecord } from '../lib/rankedin'
 import { formatCompactDate } from '../lib/formatters'
 import type { PairPreparationContext } from '../lib/opponentContext'
 import { CardHeading } from './CardHeading'
+import { ExplorerPlayerLink } from './ExplorerPlayerLink'
 
 type PairPreparationPanelProps = {
   pair: PairRecord
@@ -56,7 +57,7 @@ export function PairPreparationPanel({ pair, context, isLoading, error, requeste
               {context.opponents.slice(0, 6).map((opponent) => (
                 <div className="pair-preparation-opponent" key={opponent.id}>
                   <div>
-                    <strong>{opponent.name}</strong>
+                    <strong><ExplorerPlayerLink rankedInId={opponent.rankedInId} name={opponent.name}>{opponent.name}</ExplorerPlayerLink></strong>
                     <span>{meetingLabel(opponent.meetings)} · last {resultLabel(opponent.latestWon)} {formatCompactDate(opponent.latestDate)}</span>
                   </div>
                   <span className={`pair-preparation-record ${opponent.latestWon === true ? 'win' : opponent.latestWon === false ? 'loss' : ''}`}>

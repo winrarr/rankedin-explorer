@@ -17,6 +17,7 @@ import { RankedinLink } from './RankedinLink'
 import { LoadingValue } from './LoadingValue'
 import { InfoTip } from './InfoTip'
 import { LeagueProgressSection, PlayerRecentForm } from './LeagueProgressSection'
+import { ExplorerPlayerLink } from './ExplorerPlayerLink'
 import { ProgressTimelineChart } from './ProgressTimelineChart'
 import { progressSeriesColors } from './playerProgressColors'
 import type {
@@ -181,7 +182,7 @@ export function PlayerProgressWorkspace({ profile, analysis, dpfRankings, dpfRan
                       <td>{formatCompactDate(point.event.startDate)}</td>
                       <td><strong className="progress-result-class">{point.className}</strong><span className="progress-result-raw">{point.event.className}</span></td>
                       <td><strong className="progress-result-placement">{formatPercent(point.percentage)}</strong><span>{placementSummaryPosition(point.event)} of {point.event.fieldSize ?? '—'} pairs</span></td>
-                      <td>{point.event.partner ?? 'Unavailable'}</td>
+                      <td>{point.event.partner ? <ExplorerPlayerLink rankedInId={point.event.partnerRankedInId} name={point.event.partner}>{point.event.partner}</ExplorerPlayerLink> : 'Unavailable'}</td>
                       <td><a className="progress-event-link" href={`https://www.rankedin.com/en/tournament/${point.event.id}`} target="_blank" rel="noreferrer">{point.event.name}<ArrowUpRight size={13} /></a></td>
                     </tr>
                   ))}

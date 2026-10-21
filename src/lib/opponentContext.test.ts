@@ -46,7 +46,7 @@ describe('summarizeFieldOpponents', () => {
       draws: 1,
     })
     expect(result.opponents).toEqual([
-      expect.objectContaining({ id: 3, name: 'Opponent One', meetings: 2, wins: 1, losses: 1, latestDate: '02/08/2026', latestWon: false }),
+      expect.objectContaining({ id: 3, name: 'Opponent One', rankedInId: 'R3', meetings: 2, wins: 1, losses: 1, latestDate: '02/08/2026', latestWon: false }),
       expect.objectContaining({ id: 4, name: 'Opponent Two', meetings: 1 }),
     ])
   })

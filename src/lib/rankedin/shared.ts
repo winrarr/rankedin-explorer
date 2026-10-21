@@ -13,6 +13,10 @@ export function parseRankedinDate(value: string) {
   return new Date(`${year}-${month}-${day}T${hours}:${minutes}:00`).getTime()
 }
 
+export function rankedInIdFromPlayerUrl(url: string) {
+  return url.match(/\/player\/(R\d+)/i)?.[1]?.toUpperCase() ?? null
+}
+
 export async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,

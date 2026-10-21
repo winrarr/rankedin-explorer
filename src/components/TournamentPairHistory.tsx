@@ -3,6 +3,7 @@ import type { PairRecord } from '../lib/rankedin'
 import { PairPreparationPanel } from './PairPreparationPanel'
 import { PairUsButton } from './PairUsButton'
 import { PlayerHistoryColumn } from './PlayerHistoryColumn'
+import { ExplorerPlayerLink } from './ExplorerPlayerLink'
 import type { TournamentWorkspacePairState } from './tournamentTypes'
 
 type TournamentPairHistoryProps = {
@@ -31,7 +32,11 @@ export function TournamentPairHistory({
       <div className="card-heading card-heading-small">
         <div>
           <div className="section-kicker">PAIR HISTORY</div>
-          <h2>{selectedPair.first.name} + {selectedPair.second.name}</h2>
+          <h2>
+            <ExplorerPlayerLink rankedInId={selectedPair.first.rankedInId} name={selectedPair.first.name}>{selectedPair.first.name}</ExplorerPlayerLink>
+            {' + '}
+            <ExplorerPlayerLink rankedInId={selectedPair.second.rankedInId} name={selectedPair.second.name}>{selectedPair.second.name}</ExplorerPlayerLink>
+          </h2>
         </div>
         <div className="pair-history-actions">
           <PairUsButton

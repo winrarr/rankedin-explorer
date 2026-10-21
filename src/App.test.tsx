@@ -76,6 +76,7 @@ function analysis(playerId: number, className: string): PlayerAnalysis {
     ratingEnd: null,
     rankingPoints: null,
     partner: null,
+    partnerRankedInId: null,
     matchQuery: null,
     matches: [],
   }

@@ -63,6 +63,7 @@ Use an existing primitive when the structure and meaning match. Current shared p
 - `MetricCard` for a labeled value with supporting detail.
 - `CardHeading` for a title, optional kicker or description, and optional icon or tools inside a card. Omit the kicker when it would repeat the title.
 - `RankedinLink` for source links that open a public Rankedin path in a new tab.
+- `ExplorerPlayerLink` for known public player IDs that open that player's Explorer workspace in a new tab.
 - `InfoTip` for concise explanations of unfamiliar metrics.
 - `LoadingValue` for values that are not available yet.
 

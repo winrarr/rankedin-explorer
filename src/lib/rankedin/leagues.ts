@@ -1,5 +1,5 @@
 import { query, request } from './request'
-import { parseRankedinDate, mapWithConcurrency, sportName } from './shared'
+import { parseRankedinDate, mapWithConcurrency, rankedInIdFromPlayerUrl, sportName } from './shared'
 import { getPlayerParticipatedEvents } from './players'
 import type {
   LeagueSearchResult,
@@ -122,6 +122,7 @@ function normalizeLeagueTeam(team: RawLeaguePoolTeam): LeagueTeam {
     players: (team.Players ?? []).map((player) => ({
       name: player.Name,
       url: player.Url,
+      rankedInId: rankedInIdFromPlayerUrl(player.Url),
       countryCode: player.CountryShort || null,
       isCaptain: player.IsCaptain,
       rating: player.Rating,

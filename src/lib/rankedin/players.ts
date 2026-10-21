@@ -1,5 +1,6 @@
 import { query, request } from './request'
 import { mapWithConcurrency } from './shared'
+import { getClassParticipants } from './tournaments'
 import type {
   PlayerRecord,
   PlayerSearchResult,
@@ -344,8 +345,11 @@ function isPlayerOnSide(side: RawSide, playerId: number) {
   return side.Player1Id === playerId || side.Player2Id === playerId
 }
 
-function sideNames(side: RawSide) {
-  return [side.Name, side.Player2Name].filter(Boolean)
+function sidePlayers(side: RawSide) {
+  return [
+    { id: side.Player1Id, name: side.Name },
+    { id: side.Player2Id, name: side.Player2Name },
+  ].filter((player) => Boolean(player.name))
 }
 
 function formatMatchScore(match: RawMatch) {
@@ -369,6 +373,8 @@ function normalizeMatch(match: RawMatch, playerId: number): MatchRecord | null {
   const won = winner === null || winner === undefined ? null : playerOnChallenger ? winner : !winner
   const currentSide = playerOnChallenger ? match.Challenger : match.Challenged
   const opponentSide = playerOnChallenger ? match.Challenged : match.Challenger
+  const currentPlayers = sidePlayers(currentSide)
+  const opponentPlayers = sidePlayers(opponentSide)
 
   return {
     id: match.Id,
@@ -376,9 +382,9 @@ function normalizeMatch(match: RawMatch, playerId: number): MatchRecord | null {
     className: match.TournamentClassName,
     draw: match.Draw,
     won,
-    partner: sideNames(currentSide).find((name) => name !== currentSide.Name) ?? '',
-    opponents: sideNames(opponentSide),
-    opponentIds: [opponentSide.Player1Id, opponentSide.Player2Id].filter((id) => id > 0),
+    partner: currentPlayers.find((player) => player.id !== playerId)?.name ?? '',
+    opponents: opponentPlayers.map((player) => player.name),
+    opponentIds: opponentPlayers.map((player) => player.id),
     score: formatMatchScore(match),
   }
 }
@@ -452,6 +458,7 @@ async function analyzeEvent(event: RawEvent, playerId: number): Promise<PlayerEv
     ratingEnd: null,
     rankingPoints: null,
     partner: null,
+    partnerRankedInId: null,
     matchQuery: null,
     matches: [],
   } satisfies PlayerEventAnalysis
@@ -466,6 +473,19 @@ async function analyzeEvent(event: RawEvent, playerId: number): Promise<PlayerEv
     if (!match) return base
 
     const playerIsFirst = match.playerResult.Player1ParticipantId === playerId
+    const partnerParticipantId = playerIsFirst
+      ? match.playerResult.Player2ParticipantId
+      : match.playerResult.Player1ParticipantId
+    let partnerRankedInId: string | null = null
+    try {
+      const pairs = await getClassParticipants(event.Id, match.classOption.Id)
+      partnerRankedInId = pairs
+        .flatMap((pair) => [pair.first, pair.second])
+        .find((player) => player.id === partnerParticipantId)?.rankedInId ?? null
+    } catch {
+      // Keep the event result when its public participant list is unavailable.
+    }
+
     return {
       ...base,
       className: match.classOption.Name,
@@ -476,6 +496,7 @@ async function analyzeEvent(event: RawEvent, playerId: number): Promise<PlayerEv
       ratingEnd: playerIsFirst ? match.playerResult.Player1RatingEnd : match.playerResult.Player2RatingEnd,
       rankingPoints: match.playerResult.RankingPoint?.Points ?? null,
       partner: playerIsFirst ? match.playerResult.Player2Name : match.playerResult.Player1Name,
+      partnerRankedInId,
       matchQuery: { tournamentId: event.Id, classId: match.classOption.Id },
       matches: [],
     }

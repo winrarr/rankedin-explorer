@@ -4,6 +4,7 @@ import { formatCompactDate, formatDate, ordinalPosition } from '../lib/formatter
 import { CardHeading } from './CardHeading'
 import { MetricCard } from './MetricCard'
 import { RankedinLink } from './RankedinLink'
+import { ExplorerPlayerLink } from './ExplorerPlayerLink'
 
 type LeagueExplorerProps = {
   snapshot: LeagueSnapshot
@@ -99,9 +100,11 @@ function LeagueTeamGrid({ snapshot }: { snapshot: LeagueSnapshot }) {
             </div>
             <div className="league-explorer-team-players">
               {team.players.map((player) => (
-                <RankedinLink path={player.url} showIcon={false} key={player.url}>
-                  <span>{player.name}</span>{player.isCaptain && <small>captain</small>}
-                </RankedinLink>
+                <div className="league-explorer-team-player" key={player.url}>
+                  <ExplorerPlayerLink rankedInId={player.rankedInId} name={player.name}>{player.name}</ExplorerPlayerLink>
+                  {player.isCaptain && <small>captain</small>}
+                  <RankedinLink className="league-team-player-source" path={player.url} ariaLabel={`Open ${player.name} on Rankedin`} />
+                </div>
               ))}
               {!team.players.length && <span className="muted">No public players listed.</span>}
             </div>

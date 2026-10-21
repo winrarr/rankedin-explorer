@@ -4,6 +4,7 @@ import { dateTimestamp } from './formatters'
 export type FieldOpponentSummary = {
   id: number
   name: string
+  rankedInId: string | null
   meetings: number
   wins: number
   losses: number
@@ -24,7 +25,7 @@ export type PairPreparationContext = {
 
 function playerMap(participants: PairRecord[]) {
   return new Map(
-    participants.flatMap((pair) => [pair.first, pair.second]).map((player) => [player.id, player.name]),
+    participants.flatMap((pair) => [pair.first, pair.second]).map((player) => [player.id, player]),
   )
 }
 
@@ -57,7 +58,8 @@ export function summarizeFieldOpponents(
       const isNewer = !previous || dateTimestamp(match.date) >= dateTimestamp(previous.latestDate)
       summaries.set(id, {
         id,
-        name: namesById.get(id) ?? 'Opponent unavailable',
+        name: namesById.get(id)?.name ?? 'Opponent unavailable',
+        rankedInId: namesById.get(id)?.rankedInId ?? null,
         meetings: (previous?.meetings ?? 0) + 1,
         wins: (previous?.wins ?? 0) + (match.won === true ? 1 : 0),
         losses: (previous?.losses ?? 0) + (match.won === false ? 1 : 0),

@@ -49,6 +49,7 @@ const input: TournamentExportInput = {
         ratingEnd: 14.2,
         rankingPoints: 10,
         partner: 'Beta Two',
+        partnerRankedInId: null,
         matchQuery: null,
         matches: [],
       }],

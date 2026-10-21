@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import {
   CircleHelp,
   LoaderCircle,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import {
   getEventMatches,
+  getClassParticipants,
   getPlayerCurrentLeagueDivision,
   getPlayerProfile,
   type MatchRecord,
@@ -26,6 +27,7 @@ import {
   placementPosition,
 } from '../lib/formatters'
 import { RankedinLink } from './RankedinLink'
+import { ExplorerPlayerLink } from './ExplorerPlayerLink'
 
 type PlayerHistoryColumnProps = {
   player: PlayerRecord
@@ -44,6 +46,7 @@ export function PlayerHistoryColumn({
 }: PlayerHistoryColumnProps) {
   const [matchStates, setMatchStates] = useState<Record<number, {
     matches: MatchRecord[] | null
+    playerRankedInIds: Record<number, string>
     error: string | null
     isLoading: boolean
   }>>({})
@@ -107,24 +110,27 @@ export function PlayerHistoryColumn({
 
     setMatchStates((current) => ({
       ...current,
-      [event.id]: { matches: null, error: null, isLoading: true },
+      [event.id]: { matches: null, playerRankedInIds: {}, error: null, isLoading: true },
     }))
 
     try {
-      const eventMatches = await getEventMatches(
-        event.matchQuery.tournamentId,
-        event.matchQuery.classId,
-        player.id,
+      const [eventMatches, pairs] = await Promise.all([
+        getEventMatches(event.matchQuery.tournamentId, event.matchQuery.classId, player.id),
+        getClassParticipants(event.matchQuery.tournamentId, event.matchQuery.classId),
+      ])
+      const playerRankedInIds = Object.fromEntries(
+        pairs.flatMap((pair) => [pair.first, pair.second]).map((participant) => [participant.id, participant.rankedInId]),
       )
       setMatchStates((current) => ({
         ...current,
-        [event.id]: { matches: eventMatches, error: null, isLoading: false },
+        [event.id]: { matches: eventMatches, playerRankedInIds, error: null, isLoading: false },
       }))
     } catch (caught) {
       setMatchStates((current) => ({
         ...current,
         [event.id]: {
           matches: null,
+          playerRankedInIds: {},
           error: caught instanceof Error ? caught.message : 'Match details could not be loaded.',
           isLoading: false,
         },
@@ -137,7 +143,9 @@ export function PlayerHistoryColumn({
       <div className="player-history-header">
         <div className="avatar">{initials(player.name)}</div>
         <div className="player-history-name">
-          <strong>{player.name}</strong>
+          <ExplorerPlayerLink rankedInId={player.rankedInId} name={player.name} className="player-history-explorer-link">
+            <strong>{player.name}</strong>
+          </ExplorerPlayerLink>
           <span>Rating at target event: {formatRating(player.rating)}</span>
         </div>
         <RankedinLink
@@ -211,7 +219,7 @@ export function PlayerHistoryColumn({
                     </div>
                     <span className="placement-class">{event.className ? compactClassName(event.className) : 'Class result not published'}</span>
                     <span className="placement-partner">
-                      {event.partner ? 'With ' + event.partner : 'Partner unavailable'}
+                      {event.partner ? <>With <ExplorerPlayerLink rankedInId={event.partnerRankedInId} name={event.partner}>{event.partner}</ExplorerPlayerLink></> : 'Partner unavailable'}
                       {eventMatches.length ? ' · ' + eventRecord.wins + '–' + eventRecord.losses + ' in matches' : ''}
                     </span>
                     {event.matchQuery ? (
@@ -228,7 +236,14 @@ export function PlayerHistoryColumn({
                                   {match.won === true ? 'W' : match.won === false ? 'L' : '—'}
                                 </span>
                                 <div className="match-detail-opponent">
-                                  <strong>{match.opponents.length ? 'vs ' + match.opponents.join(' + ') : 'Opponent unavailable'}</strong>
+                                  <strong>
+                                    {match.opponents.length ? <>vs {match.opponents.map((name, index) => (
+                                      <Fragment key={`${match.opponentIds[index]}-${name}`}>
+                                        {index > 0 && ' + '}
+                                        <ExplorerPlayerLink rankedInId={eventMatchState?.playerRankedInIds[match.opponentIds[index]]} name={name}>{name}</ExplorerPlayerLink>
+                                      </Fragment>
+                                    ))}</> : 'Opponent unavailable'}
+                                  </strong>
                                   <span>{match.draw || match.className}</span>
                                 </div>
                                 <span className="match-detail-score">{match.score}</span>

@@ -28,6 +28,7 @@ React view state also drives:
 ## Boundaries
 
 - `src/lib/rankedin.ts` is the stable public API-client façade. Its `src/lib/rankedin/` modules own URLs, raw payloads, API errors and normalization; keep Rankedin's PascalCase response shape inside that folder.
+- `src/components/ExplorerPlayerLink.tsx` opens a player workspace from a known public Rankedin ID. Do not resolve links from names alone; same-name public profiles are common.
 - `src/lib/exports.ts` turns the normalized tournament view state into browser downloads. It must not fetch API data or become a second persistence layer.
 - `src/hooks/usePublicSearch.ts` owns the shared debounce, timeout, cancellation and stale-response handling for tournament, player name and Lunar League name searches.
 - `src/lib/preferences.ts` owns the deliberately narrow local persistence policy.
@@ -59,7 +60,7 @@ The Rankedin client is divided by responsibility: `request.ts` owns the bounded 
 1. Parse a public player profile URL or `R...` ID.
 2. Resolve the public ID to the API's numeric player ID and profile metadata.
 3. Load the current official DPF ranking points alongside one bounded participated-event window, then split the events into finished tournament events and finished Lunar League seasons.
-4. Analyze tournament placements and league seasons in parallel. For tournaments, locate the player's result by numeric participant ID across event classes.
+4. Analyze tournament placements and league seasons in parallel. For tournaments, locate the player's result by numeric participant ID across event classes, then match the partner's numeric ID against the class roster to provide a safe Explorer link.
 5. For Lunar League, resolve the player's team directly, then load pool standing, team fixtures and individual doubles in parallel within the shared request queue.
 6. For the combined league chart, load the pool fixture list, the league ordering rules and one aggregate standing response per completed fixture. Reconstruct the selected team's rank after each of its own fixtures using all pool fixtures completed by that point, while keeping fixture result, score and opponent on the checkpoint. Show only divisions the player has entered, use the player's first-to-last fixture as each season slot, and compress gaps between chronological slots while preserving fixture order within each slot.
 7. Normalize organizer-entered tournament class labels for chart series while retaining raw labels in the result table; keep league division names categorical and preserve region/pool suffixes as metadata.

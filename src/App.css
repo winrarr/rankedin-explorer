@@ -1037,6 +1037,9 @@ h1 em {
   font-size: 10px;
   font-weight: 800;
 }
+.field-placement-name.explorer-player-link {
+  display: block;
+}
 .field-dpf-summary {
   max-width: 100%;
   overflow: hidden;
@@ -1406,6 +1409,20 @@ h1 em {
   color: var(--muted);
   font-size: 9px;
   line-height: 1.45;
+}
+.explorer-player-link {
+  color: var(--blue);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--blue) 42%, transparent);
+  text-underline-offset: 2px;
+}
+.explorer-player-link:hover {
+  text-decoration-color: currentColor;
+}
+.explorer-player-link:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
 }
 .progress-series-grid {
   display: grid;
@@ -1959,6 +1976,11 @@ h1 em {
   white-space: nowrap;
   font-size: 13px;
   font-weight: 800;
+}
+.player-history-explorer-link {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
 }
 .player-history-name span {
   color: var(--muted);
@@ -2823,23 +2845,24 @@ h1 em {
   padding-top: 9px;
   border-top: 1px solid var(--line);
 }
-.league-explorer-team-players a {
+.league-explorer-team-player {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: 8px;
-  color: var(--ink);
   font-size: 9px;
 }
-.league-explorer-team-players a:hover {
-  color: var(--blue);
-}
-.league-explorer-team-players a span {
+.league-explorer-team-player > .explorer-player-link {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.league-explorer-team-players small {
+.league-team-player-source {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+}
+.league-explorer-team-player small {
   flex: none;
   color: var(--muted);
   font-size: 8px;
