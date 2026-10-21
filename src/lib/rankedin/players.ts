@@ -316,10 +316,11 @@ export async function searchPlayersByName(term: string, take = 8, signal?: Abort
     }))
 }
 
-export async function getPlayerProfile(reference: string): Promise<PlayerProfile> {
+export async function getPlayerProfile(reference: string, signal?: AbortSignal): Promise<PlayerProfile> {
   const { rankedInId } = parsePlayerReference(reference)
   const response = await request<RawPlayerProfileResponse>(
     `/player/PlayerProfileInfoAsync${query({ rankedinId: rankedInId, language: 'en' })}`,
+    signal,
   )
   const header = response.Header
   const age = header.Age?.trim()

@@ -29,8 +29,10 @@ React view state also drives:
 
 - `src/lib/rankedin.ts` is the stable public API-client façade. Its `src/lib/rankedin/` modules own URLs, raw payloads, API errors and normalization; keep Rankedin's PascalCase response shape inside that folder.
 - `src/components/ExplorerPlayerLink.tsx` opens a player workspace from a known public Rankedin ID. Do not resolve links from names alone; same-name public profiles are common.
+- `src/lib/playerConnections.ts` summarizes partners from visible event results and opponents from already-loaded match details; it does not request more history.
 - `src/lib/exports.ts` turns the normalized tournament view state into browser downloads. It must not fetch API data or become a second persistence layer.
 - `src/hooks/usePublicSearch.ts` owns the shared debounce, timeout, cancellation and stale-response handling for tournament, player name and Lunar League name searches.
+- `src/components/WorkspaceSearch.tsx` adds optional, cancellable profile context to visible player suggestions and keeps arrow/Enter/Escape navigation in the search UI. Country and club details are supplementary; the public `R...` ID remains the safe identity key.
 - `src/lib/preferences.ts` owns the deliberately narrow local persistence policy.
 - `src/lib/analytics.ts` owns optional GoatCounter setup and generic successful-lookup events. Keep query references and search text out of analytics payloads; deployment setup is documented in `docs/analytics.md`.
 - `src/App.tsx` composes the screens and owns cross-screen navigation, preferences and shared actions. `src/hooks/useTournamentWorkspace.ts`, `useTournamentFieldData.ts`, `usePlayerWorkspace.ts` and `useLeagueWorkspace.ts` own their mode-specific request state and stale-response handling. Focused workspace views live in `src/components/`; player charts and tournament field panels are separate components, while reusable progress transformations live in `src/lib/playerProgress.ts`.
@@ -54,6 +56,7 @@ The Rankedin client is divided by responsibility: `request.ts` owns the bounded 
 7. For the field summary, select each player's newest `Type === 3` Lunar League event and resolve only its division name; older seasons and placement are excluded.
 8. Load matches for the matching class and normalize partners, opponents, scores and outcomes.
 9. When the user marks a selected pair as “us”, inspect up to five recent finished events from the first player's history, retain numeric opponent IDs, intersect them with the current class roster, deduplicate by match ID and show a compact preparation context.
+10. In each player history, summarize partner frequency from the visible event results and opponent frequency only from match details the user has loaded. Do not fetch extra match histories for this summary.
 
 ### Player Progress
 
@@ -80,7 +83,7 @@ League loading is league-scoped rather than player-scoped. The Player Progress v
 
 ### Search and loading reliability
 
-Name searches are debounced before requesting the public API. Each search has an abortable request, an eight-second timeout and a request generation check, so stale responses cannot overwrite newer input or leave the interface stuck in a searching state. Tournament, player and Lunar League searches use their corresponding public search paths. Direct public IDs bypass name search. Long analyses expose partial results and use explicit loading/error states; a later request generation supersedes earlier work without allowing its callbacks to update the current view.
+Name searches are debounced before requesting the public API. Each search has an abortable request, an eight-second timeout and a request generation check, so stale responses cannot overwrite newer input or leave the interface stuck in a searching state. Tournament, player and Lunar League searches use their corresponding public search paths. Player suggestions can be moved with the arrow keys, selected with Enter and dismissed with Escape; direct public IDs bypass name search. Optional country and club lookups are limited to three concurrent requests and are cancelled when the suggestion context changes. Long analyses expose partial results and use explicit loading/error states; a later request generation supersedes earlier work without allowing its callbacks to update the current view.
 
 ### Report export
 

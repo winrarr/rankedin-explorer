@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import {
   ArrowUpRight,
   CircleHelp,
@@ -14,6 +14,7 @@ import type {
   TournamentSearchResult,
 } from '../lib/rankedin'
 import {
+  getPlayerProfile,
   searchPlayersByName,
   searchTeamLeaguesByName,
   searchTournamentsByName,
@@ -72,6 +73,9 @@ export function WorkspaceSearch({
 }: WorkspaceSearchProps) {
   const [showSearch, setShowSearch] = useState(false)
   const searchAnchorRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const suppressSearchOnFocusRef = useRef(false)
+  const [playerSearchDetails, setPlayerSearchDetails] = useState<Record<string, { countryCode: string | null; homeClubName: string | null }>>({})
   const activeMode = mode
   const tournamentUrl = references.tournament
   const playerReference = references.player
@@ -108,6 +112,49 @@ export function WorkspaceSearch({
     label: 'Player',
     search: searchPlayersByName,
   })
+  const playerSearchResults = activeMode === 'player' ? playerSearch.results : activeMode === 'league' ? leaguePlayerSearch.results : []
+  const playerSearchResultIds = playerSearchResults.map((player) => player.rankedInId).join('|')
+
+  useEffect(() => {
+    const reference = activeMode === 'player' ? playerReference : leagueReference
+    const hasNameSearch = activeMode === 'player'
+      ? !isDirectPlayerReference(reference)
+      : activeMode === 'league' && !isDirectLeagueReference(reference)
+    if (!showSearch || !hasNameSearch || !playerSearchResultIds) {
+      setPlayerSearchDetails({})
+      return
+    }
+
+    const controller = new AbortController()
+    const rankedInIds = playerSearchResultIds.split('|')
+    let nextIndex = 0
+    setPlayerSearchDetails({})
+
+    async function loadDetails() {
+      const workers = Array.from({ length: Math.min(3, rankedInIds.length) }, async () => {
+        while (!controller.signal.aborted) {
+          const rankedInId = rankedInIds[nextIndex]
+          nextIndex += 1
+          if (!rankedInId) return
+
+          try {
+            const profile = await getPlayerProfile(rankedInId, controller.signal)
+            if (controller.signal.aborted) return
+            setPlayerSearchDetails((current) => ({
+              ...current,
+              [rankedInId]: { countryCode: profile.countryCode, homeClubName: profile.homeClubName },
+            }))
+          } catch {
+            // Search remains useful when optional profile details are unavailable.
+          }
+        }
+      })
+      await Promise.all(workers)
+    }
+
+    void loadDetails()
+    return () => controller.abort()
+  }, [activeMode, leagueReference, playerReference, playerSearchResultIds, showSearch])
 
   useEffect(() => setShowSearch(false), [activeMode])
 
@@ -151,6 +198,63 @@ export function WorkspaceSearch({
     onSubmit(activeMode)
   }
 
+  function handleSearchKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === 'Escape') {
+      if (!showSearch) return
+      event.preventDefault()
+      setShowSearch(false)
+      suppressSearchOnFocusRef.current = event.target !== searchInputRef.current
+      searchInputRef.current?.focus()
+      return
+    }
+
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    const target = event.target
+    const isInput = target === searchInputRef.current
+    const isResult = target instanceof HTMLElement && target.matches('.player-search-result, .tournament-search-result')
+    if (!isInput && !isResult) return
+
+    const results = searchAnchorRef.current?.querySelectorAll<HTMLButtonElement>(
+      '.player-search-result, .tournament-search-result',
+    )
+    if (!results?.length) return
+
+    event.preventDefault()
+    const currentIndex = Array.from(results).indexOf(target as HTMLButtonElement)
+    if (isInput) {
+      results[event.key === 'ArrowDown' ? 0 : results.length - 1].focus()
+      return
+    }
+
+    if (event.key === 'ArrowUp' && currentIndex === 0) {
+      searchInputRef.current?.focus()
+      return
+    }
+    const direction = event.key === 'ArrowDown' ? 1 : -1
+    const nextIndex = Math.max(0, Math.min(results.length - 1, currentIndex + direction))
+    results[nextIndex].focus()
+  }
+
+  function handleSearchInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Enter') return
+    const firstResult = searchAnchorRef.current?.querySelector<HTMLButtonElement>(
+      '.tournament-search-result, .player-search-result',
+    )
+    const hasDirectReference = activeMode === 'tournament'
+      ? isDirectTournamentReference(tournamentUrl)
+      : activeMode === 'player'
+        ? isDirectPlayerReference(playerReference)
+        : isDirectLeagueReference(leagueReference)
+
+    if (showSearch && !hasDirectReference && firstResult) {
+      event.preventDefault()
+      firstResult.click()
+      return
+    }
+
+    if (activeMode === 'tournament' || hasDirectReference) submit()
+  }
+
   return (
         <section className="hero-grid">
           <div className="hero-copy">
@@ -160,11 +264,12 @@ export function WorkspaceSearch({
               <label htmlFor={activeMode === 'tournament' ? 'tournament-url' : activeMode === 'player' ? 'player-reference' : 'league-reference'}>
                 {activeMode === 'tournament' ? 'Find a public tournament' : activeMode === 'player' ? 'Find a public player' : 'Find a public Lunar League'}
               </label>
-              <div className="reference-search-anchor" ref={searchAnchorRef}>
+              <div className="reference-search-anchor" ref={searchAnchorRef} onKeyDownCapture={handleSearchKeyDown}>
                 <div className="url-input-row">
                   <div className="url-input-wrap">
                     {activeMode === 'tournament' || activeMode === 'league' ? <GitBranch size={17} /> : <Search size={17} />}
                     <input
+                      ref={searchInputRef}
                       id={activeMode === 'tournament' ? 'tournament-url' : activeMode === 'player' ? 'player-reference' : 'league-reference'}
                       value={activeMode === 'tournament' ? tournamentUrl : activeMode === 'player' ? playerReference : leagueReference}
                       onChange={(event) => {
@@ -180,15 +285,15 @@ export function WorkspaceSearch({
                         }
                       }}
                       onFocus={() => {
+                        if (suppressSearchOnFocusRef.current) {
+                          suppressSearchOnFocusRef.current = false
+                          return
+                        }
                         if (activeMode === 'tournament' && !isDirectTournamentReference(tournamentUrl)) setShowSearch(true)
                         if (activeMode === 'player') setShowSearch(true)
                         if (activeMode === 'league' && !isDirectLeagueReference(leagueReference)) setShowSearch(true)
                       }}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' && (activeMode === 'tournament' || (activeMode === 'player' && isDirectPlayerReference(playerReference)) || (activeMode === 'league' && isDirectLeagueReference(leagueReference)))) {
-                          submit()
-                        }
-                      }}
+                      onKeyDown={handleSearchInputKeyDown}
                       placeholder={activeMode === 'tournament' ? 'Name, URL or ID' : activeMode === 'player' ? 'Name, URL or R-number' : 'League or player name'}
                     />
                     {(activeMode === 'tournament' ? tournamentUrl : activeMode === 'player' ? playerReference : leagueReference) && <button className="clear-input" type="button" aria-label={`Clear ${activeMode} reference`} onClick={clearReference}><X size={14} /></button>}
@@ -226,6 +331,12 @@ export function WorkspaceSearch({
                           <div className="player-search-result-row" key={player.rankedInId}>
                             <button className="player-search-result" type="button" onClick={() => selectPlayerSearchResult(player)}>
                               <span className="player-search-result-name">{player.name}</span>
+                              {playerSearchDetails[player.rankedInId] && (
+                                <span className="player-search-result-meta">
+                                  {playerSearchDetails[player.rankedInId].homeClubName && <span className="player-search-result-club">{playerSearchDetails[player.rankedInId].homeClubName}</span>}
+                                  {playerSearchDetails[player.rankedInId].countryCode && <span className="player-search-result-country">{playerSearchDetails[player.rankedInId].countryCode?.toUpperCase()}</span>}
+                                </span>
+                              )}
                               <span className="player-search-result-id">{player.rankedInId}</span>
                             </button>
                             <ExplorerPlayerLink className="player-search-open-link" rankedInId={player.rankedInId} name={player.name}>
@@ -262,6 +373,12 @@ export function WorkspaceSearch({
                             <div className="player-search-result-row" key={player.rankedInId}>
                               <button className="player-search-result" type="button" onClick={() => void selectLeaguePlayerSearchResult(player)}>
                                 <span className="player-search-result-name">{player.name}</span>
+                                {playerSearchDetails[player.rankedInId] && (
+                                  <span className="player-search-result-meta">
+                                    {playerSearchDetails[player.rankedInId].homeClubName && <span className="player-search-result-club">{playerSearchDetails[player.rankedInId].homeClubName}</span>}
+                                    {playerSearchDetails[player.rankedInId].countryCode && <span className="player-search-result-country">{playerSearchDetails[player.rankedInId].countryCode?.toUpperCase()}</span>}
+                                  </span>
+                                )}
                                 <span className="player-search-result-id">Find current Lunar League</span>
                               </button>
                               <ExplorerPlayerLink className="player-search-open-link" rankedInId={player.rankedInId} name={player.name}>

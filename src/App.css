@@ -524,6 +524,12 @@ h1 em {
   border-color: var(--blue);
   background: var(--blue-soft);
 }
+.player-search-result:focus-visible,
+.tournament-search-result:focus-visible,
+.player-search-open-link:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
 .player-search-open-link {
   flex: none;
   width: 34px;
@@ -551,6 +557,25 @@ h1 em {
 .player-search-result-id {
   color: var(--muted);
   font-size: 9px;
+}
+.player-search-result-meta {
+  min-width: 0;
+  max-width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--blue);
+  font-size: 9px;
+  font-weight: 650;
+}
+.player-search-result-club {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.player-search-result-country {
+  flex: none;
 }
 .search-section-label {
   margin: 12px 2px 7px;
@@ -2033,6 +2058,79 @@ h1 em {
   color: var(--muted);
   font-size: 9px;
 }
+.player-connections-summary {
+  margin: 0 0 20px;
+  padding: 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.player-connections-heading,
+.player-connections-group-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.player-connections-heading h3 {
+  margin: 3px 0 0;
+  font-size: 13px;
+  letter-spacing: -0.02em;
+}
+.player-connections-heading > span,
+.player-connections-group-heading > span {
+  flex: none;
+  color: var(--muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.player-connections-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+.player-connections-group {
+  min-width: 0;
+}
+.player-connections-group-heading strong {
+  color: var(--ink);
+  font-size: 10px;
+}
+.player-connections-group ol {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.player-connections-group li {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+}
+.player-connections-group li > a,
+.player-connections-group li > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.player-connections-group li > span {
+  flex: none;
+  color: var(--muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.player-connections-group > p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
 .pair-history-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3144,6 +3242,10 @@ h1 em {
     font-size: 10px;
     line-height: 1.15;
     text-align: center;
+  }
+  .player-connections-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
   }
   .workspace-nav-tabs button svg {
     width: 14px;

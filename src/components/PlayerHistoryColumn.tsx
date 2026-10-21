@@ -28,6 +28,14 @@ import {
 } from '../lib/formatters'
 import { RankedinLink } from './RankedinLink'
 import { ExplorerPlayerLink } from './ExplorerPlayerLink'
+import { summarizePlayerConnections, type PlayerOpponentSummary } from '../lib/playerConnections'
+
+function opponentRecordLabel(opponent: PlayerOpponentSummary) {
+  const record = `${opponent.wins}–${opponent.losses}`
+  if (!opponent.unknownResults) return record
+  if (opponent.wins + opponent.losses) return `${record} known`
+  return 'outcomes unavailable'
+}
 
 type PlayerHistoryColumnProps = {
   player: PlayerRecord
@@ -59,6 +67,7 @@ export function PlayerHistoryColumn({
   const events = analysis?.events ?? []
   const matches = events.flatMap((event) => matchStates[event.id]?.matches ?? event.matches)
   const record = matchRecord(matches)
+  const connections = summarizePlayerConnections(events, matchStates)
 
   useEffect(() => {
     setMatchStates({})
@@ -196,6 +205,50 @@ export function PlayerHistoryColumn({
             <div><strong>{matches.length || '—'}</strong><span>matches loaded</span></div>
             <div><strong>{matches.length ? record.wins + '–' + record.losses : '—'}</strong><span>loaded record</span></div>
           </div>
+
+          <section className="player-connections-summary" aria-label={'Frequent partners and opponents for ' + player.name}>
+            <div className="player-connections-heading">
+              <div>
+                <div className="section-kicker">REPEATED CONNECTIONS</div>
+                <h3>Partners &amp; opponents</h3>
+              </div>
+              <span>{events.length} visible event {events.length === 1 ? 'result' : 'results'}</span>
+            </div>
+            <div className="player-connections-grid">
+              <div className="player-connections-group">
+                <div className="player-connections-group-heading">
+                  <strong>Frequent partners</strong>
+                  <span>event results</span>
+                </div>
+                {connections.partners.length ? (
+                  <ol>
+                    {connections.partners.slice(0, 4).map((partner) => (
+                      <li key={partner.rankedInId ?? partner.name}>
+                        <ExplorerPlayerLink rankedInId={partner.rankedInId} name={partner.name}>{partner.name}</ExplorerPlayerLink>
+                        <span>{partner.eventCount} {partner.eventCount === 1 ? 'event' : 'events'}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : <p>No partner details in the visible event results.</p>}
+              </div>
+              <div className="player-connections-group">
+                <div className="player-connections-group-heading">
+                  <strong>Frequent opponents</strong>
+                  <span>{connections.loadedMatchEventCount} of {events.length} histories loaded</span>
+                </div>
+                {connections.opponents.length ? (
+                  <ol>
+                    {connections.opponents.slice(0, 4).map((opponent, index) => (
+                      <li key={`${opponent.rankedInId ?? opponent.name}-${index}`}>
+                        <ExplorerPlayerLink rankedInId={opponent.rankedInId} name={opponent.name}>{opponent.name}</ExplorerPlayerLink>
+                        <span>{opponent.matchCount} {opponent.matchCount === 1 ? 'match' : 'matches'} · {opponentRecordLabel(opponent)}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : <p>Load match details below to build an opponent list.</p>}
+              </div>
+            </div>
+          </section>
 
           <div className="placement-list">
             <div className="placement-list-heading">

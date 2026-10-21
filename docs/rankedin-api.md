@@ -8,10 +8,10 @@ The browser client uses the public base URL `https://api.rankedin.com/v1`. API a
 
 ## Read paths used by the app
 
-- `GET /Player/PlayerProfileInfoAsync?rankedinId=...&language=en` resolves a public `R...` profile ID to the numeric player ID used by event and result endpoints.
+- `GET /Player/PlayerProfileInfoAsync?rankedinId=...&language=en` resolves a public `R...` profile ID to the numeric player ID used by event and result endpoints. Its public header also supplies country code and home club for disambiguating visible player search suggestions; this endpoint does not supply a usable rating value.
 - `GET /Search/GetRankingsAsync?term=Dansk%20Padel%20Forbunds%20rangliste&language=en&take=...&skip=...` resolves the official current DPF ranking. `GET /Ranking/SearchRankingPlayersAsync?...` searches that ranking by player name and returns the player's current points, position, category and ranking date. Match the response by `RankedinId`; names alone are not unique. The app uses this ranking for current DPF points rather than adding together event result points.
 - The same profile response exposes current-year and career doubles records; the pair history displays those normalized win-loss values without fetching every career match.
-- `GET /Search/GetPlayersByNameSimpleAsync?name=...&take=...&skip=...` returns compact public player search results with the numeric ID, display name and `R...` identifier.
+- `GET /Search/GetPlayersByNameSimpleAsync?name=...&take=...&skip=...` returns compact public player search results with the numeric ID, display name and `R...` identifier. While suggestions are open, the UI makes cancellable, bounded profile lookups for optional country and home-club context; missing profile details leave the public ID visible.
 - Lunar League discovery reuses that public player search, then reads the player’s participated events (`Type === 3`) and resolves the current league/team through `GET /TeamLeague/GetTeamLeagueTeamDetailsAsync?teamLeagueId=...&participantId=...&language=en`; active seasons are preferred, followed by the nearest upcoming season and then the most recent finished season.
 - `GET /Search/GetTournamentsAsync?term=...&language=en&take=...&skip=...` returns public tournament suggestions with the event URL, name, date and sport.
 - `GET /Search/GetTeamLeaguesAsync?term=...&language=en&take=...&skip=...` returns public team league suggestions with the league URL, name, date and sport.
