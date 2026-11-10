@@ -795,6 +795,12 @@ h1 em {
   font-weight: 800;
   letter-spacing: -0.06em;
 }
+.progress-metric-grid .metric-card:first-child strong {
+  font-size: clamp(17px, 1.8vw, 23px);
+  line-height: 1.2;
+  letter-spacing: -0.04em;
+  overflow-wrap: anywhere;
+}
 .metric-card span {
   color: var(--muted);
   font-size: 10px;
@@ -1019,6 +1025,34 @@ h1 em {
 .pair-cell span:not(.pair-index) {
   color: var(--muted);
   font-size: 11px;
+}
+.pair-games-button {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 3px 0 1px;
+  padding: 4px 7px;
+  color: var(--blue);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pair-games-button:hover {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+}
+.pair-games-button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.pair-games-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
 }
 .rating-value {
   display: block;
@@ -1284,6 +1318,30 @@ h1 em {
   flex: none;
   color: var(--muted);
   font-size: 9px;
+}
+.league-field-members {
+  margin-top: 5px;
+}
+.league-field-members summary {
+  width: fit-content;
+  color: var(--blue);
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.league-field-members summary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.league-field-player-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 11px;
+  padding: 7px 0 3px;
+}
+.league-field-player-list .explorer-player-link {
+  font-size: 10px;
 }
 .league-field-bar {
   height: 7px;
@@ -1595,13 +1653,23 @@ h1 em {
 .league-chart-wrap {
   padding: 0 23px 2px;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+.league-chart-wrap:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
 }
 .league-chart-svg {
   display: block;
-  width: 100%;
-  min-width: 680px;
+  width: auto;
+  min-width: 100%;
   height: auto;
   overflow: visible;
+}
+.league-chart-scroll-note {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 9px;
 }
 .league-grid-line {
   stroke: var(--line);
@@ -2133,6 +2201,76 @@ h1 em {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
+.pair-tournament-games {
+  margin: 0 0 14px;
+  padding: 13px 15px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.pair-tournament-games-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pair-tournament-games-heading > div {
+  min-width: 0;
+}
+.pair-tournament-games-heading .section-kicker {
+  color: var(--muted);
+}
+.pair-tournament-games-heading p,
+.pair-tournament-games-heading > span {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+}
+.pair-tournament-games-heading > span {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.pair-tournament-games-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.pair-tournament-game {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+}
+.pair-tournament-game > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.pair-tournament-game > div strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pair-tournament-game > div span,
+.pair-tournament-game-score {
+  color: var(--muted);
+  font-size: 8px;
+}
+.pair-tournament-game-score {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pair-tournament-games-empty {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
 .player-history-column {
   min-width: 0;
   padding: 18px;
@@ -2634,9 +2772,6 @@ h1 em {
 .league-season-end-point {
   stroke: var(--card);
   stroke-width: 3;
-}
-.league-chart-wrap {
-  overflow: hidden;
 }
 .league-season-axis-label {
   fill: var(--muted);
@@ -3163,6 +3298,9 @@ h1 em {
   .pair-history-grid {
     grid-template-columns: 1fr;
   }
+  .pair-tournament-games {
+    padding: 11px 12px;
+  }
   .workspace-heading {
     align-items: start;
     flex-direction: column;
@@ -3402,7 +3540,7 @@ h1 em {
     padding-right: 12px;
   }
   .league-chart-svg {
-    min-width: 0;
+    min-width: 100%;
   }
   .league-season-grid {
     grid-template-columns: 1fr;
@@ -3652,6 +3790,10 @@ h1 em {
   .pair-cell strong,
   .pair-cell span {
     font-size: 8px;
+  }
+  .pair-games-button {
+    font-size: 7px;
+    padding: 3px 4px;
   }
   .field-placement-cell {
     gap: 4px;

@@ -61,6 +61,8 @@ export function TournamentRosterTable({ participants, field, pair, actions }: To
     isLoadingPreparation: isLoadingPairPreparation,
     history: pairHistory,
     isLoadingHistory: isLoadingPair,
+    tournamentGames,
+    isLoadingTournamentGames,
   } = pair
   const { onInspectPair, onToggleUsPair } = actions
 
@@ -96,6 +98,19 @@ export function TournamentRosterTable({ participants, field, pair, actions }: To
                             <div>
                               <ExplorerPlayerLink rankedInId={pair.first.rankedInId} name={pair.first.name}><strong>{pair.first.name}</strong></ExplorerPlayerLink>
                               <ExplorerPlayerLink rankedInId={pair.second.rankedInId} name={pair.second.name}>{pair.second.name}</ExplorerPlayerLink>
+                              <button
+                                className="pair-games-button"
+                                type="button"
+                                aria-label={`Load ${pair.first.name} and ${pair.second.name} games`}
+                                disabled={selected && isLoadingTournamentGames}
+                                onClick={() => onInspectPair(pair)}
+                              >
+                                {selected && isLoadingTournamentGames
+                                  ? <><LoaderCircle className="spin" size={11} /> Loading games…</>
+                                  : selected && tournamentGames
+                                    ? `${tournamentGames.length} tournament ${tournamentGames.length === 1 ? 'game' : 'games'}`
+                                    : 'Load pair games'}
+                              </button>
                               <PairUsButton
                                 pair={pair}
                                 selected={pair.id === usPairId}

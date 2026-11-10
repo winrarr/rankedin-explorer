@@ -102,6 +102,7 @@ export type MatchRecord = {
   draw: string
   won: boolean | null
   partner: string
+  partnerId?: number | null
   opponents: string[]
   opponentIds: number[]
   score: string

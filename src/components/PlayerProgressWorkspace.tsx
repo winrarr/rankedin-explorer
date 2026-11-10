@@ -24,6 +24,7 @@ import type {
   DpfPlayerRanking,
   PlayerAnalysis,
   PlayerLeagueAnalysis,
+  PlayerLeagueDivision,
   PlayerProfile,
 } from '../lib/rankedin'
 import {
@@ -45,6 +46,9 @@ type PlayerProgressWorkspaceProps = {
   dpfRankingError: string | null
   isLoadingDpfRankings: boolean
   leagueAnalysis: PlayerLeagueAnalysis | null
+  currentLeagueDivision: PlayerLeagueDivision | null
+  currentLeagueDivisionError: string | null
+  isLoadingCurrentLeagueDivision: boolean
   leagueError: string | null
   isLoadingLeague: boolean
   error: string | null
@@ -57,7 +61,7 @@ type PlayerProgressWorkspaceProps = {
   canPrintReport: boolean
 }
 
-export function PlayerProgressWorkspace({ profile, analysis, dpfRankings, dpfRankingError, isLoadingDpfRankings, leagueAnalysis, leagueError, isLoadingLeague, error, isLoading, loadingStage, onCopyShareLink, onPrintReport, shareCopied, canShare, canPrintReport }: PlayerProgressWorkspaceProps) {
+export function PlayerProgressWorkspace({ profile, analysis, dpfRankings, dpfRankingError, isLoadingDpfRankings, leagueAnalysis, currentLeagueDivision, currentLeagueDivisionError, isLoadingCurrentLeagueDivision, leagueError, isLoadingLeague, error, isLoading, loadingStage, onCopyShareLink, onPrintReport, shareCopied, canShare, canPrintReport }: PlayerProgressWorkspaceProps) {
   const series = useMemo(() => progressSeries(analysis?.events ?? []), [analysis])
   const points = useMemo(() => series.flatMap((item) => item.points), [series])
   const latestPoint = [...points].sort((first, second) => (
@@ -104,6 +108,20 @@ export function PlayerProgressWorkspace({ profile, analysis, dpfRankings, dpfRan
       {analysis && (
         <>
           <section className="metric-grid progress-metric-grid" aria-label="Player progress summary">
+            <MetricCard
+              icon={<Users size={15} />}
+              label="CURRENT LUNAR LEAGUE"
+              value={isLoadingCurrentLeagueDivision
+                ? <LoadingValue />
+                : currentLeagueDivision?.divisionName ?? '—'}
+              detail={isLoadingCurrentLeagueDivision
+                ? 'Reading current division'
+                : currentLeagueDivision
+                  ? 'current division'
+                  : currentLeagueDivisionError
+                    ? 'division unavailable'
+                    : 'no current division found'}
+            />
             <MetricCard
               dark
               icon={<Activity size={15} />}

@@ -26,10 +26,25 @@ describe('summarizeFieldLeagueDivisions', () => {
       2: { divisionName: 'Serie 2 - A' },
       3: { divisionName: 'Serie 3 - B' },
       4: null,
-    })).toEqual({
+    }, [
+      { id: 1, name: 'A Player', rankedInId: 'R000000001' },
+      { id: 2, name: 'B Player', rankedInId: 'R000000002' },
+      { id: 3, name: 'C Player', rankedInId: 'R000000003' },
+    ])).toEqual({
       divisions: [
-        { divisionName: 'Serie 2 - A', playerCount: 2 },
-        { divisionName: 'Serie 3 - B', playerCount: 1 },
+        {
+          divisionName: 'Serie 2 - A',
+          playerCount: 2,
+          players: [
+            { name: 'A Player', rankedInId: 'R000000001' },
+            { name: 'B Player', rankedInId: 'R000000002' },
+          ],
+        },
+        {
+          divisionName: 'Serie 3 - B',
+          playerCount: 1,
+          players: [{ name: 'C Player', rankedInId: 'R000000003' }],
+        },
       ],
       missingCount: 1,
     })
@@ -46,11 +61,11 @@ describe('summarizeFieldLeagueDivisions', () => {
       7: { divisionName: 'Elitedivision - A' },
       8: { divisionName: 'Unrecognised division' },
     }).divisions).toEqual([
-      { divisionName: 'Elitedivision - A', playerCount: 1 },
-      { divisionName: '1. Division - B', playerCount: 1 },
-      { divisionName: 'Serie 1 - A', playerCount: 1 },
-      { divisionName: 'Serie 3 - B', playerCount: 4 },
-      { divisionName: 'Unrecognised division', playerCount: 1 },
+      { divisionName: 'Elitedivision - A', playerCount: 1, players: [] },
+      { divisionName: '1. Division - B', playerCount: 1, players: [] },
+      { divisionName: 'Serie 1 - A', playerCount: 1, players: [] },
+      { divisionName: 'Serie 3 - B', playerCount: 4, players: [] },
+      { divisionName: 'Unrecognised division', playerCount: 1, players: [] },
     ])
   })
 })

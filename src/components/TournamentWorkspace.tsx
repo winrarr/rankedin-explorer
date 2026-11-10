@@ -79,8 +79,11 @@ export function TournamentWorkspace({ state, actions }: TournamentWorkspaceProps
     [fieldClassSummaries],
   )
   const fieldLeagueSummary = useMemo(
-    () => summarizeFieldLeagueDivisions(fieldLeagueDivisions),
-    [fieldLeagueDivisions],
+    () => summarizeFieldLeagueDivisions(
+      fieldLeagueDivisions,
+      snapshot.participants.flatMap((participant) => [participant.first, participant.second]),
+    ),
+    [fieldLeagueDivisions, snapshot.participants],
   )
   const currentLeagueDivisionPlayers = fieldLeagueSummary.divisions.reduce(
     (total, division) => total + division.playerCount,

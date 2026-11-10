@@ -1,11 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   getPlayerDpfRankings,
+  getPlayerCurrentLeagueDivision,
   getPlayerAnalysis,
   getPlayerLeagueAnalysis,
   getPlayerProfile,
 } from '../lib/rankedin'
-import type { DpfPlayerRanking, PlayerAnalysis, PlayerLeagueAnalysis, PlayerProfile } from '../lib/rankedin'
+import type {
+  DpfPlayerRanking,
+  PlayerAnalysis,
+  PlayerLeagueAnalysis,
+  PlayerLeagueDivision,
+  PlayerProfile,
+} from '../lib/rankedin'
 import { isDirectPlayerReference } from '../lib/references'
 import { trackSuccessfulLookup } from '../lib/analytics'
 import type { SharedLocationUpdate } from '../lib/sharedLocation'
@@ -33,6 +40,9 @@ export function usePlayerWorkspace({
   const [isLoadingPlayerDpfRankings, setIsLoadingPlayerDpfRankings] = useState(false)
   const [playerDpfRankingError, setPlayerDpfRankingError] = useState<string | null>(null)
   const [playerLeagueAnalysis, setPlayerLeagueAnalysis] = useState<PlayerLeagueAnalysis | null>(null)
+  const [currentLeagueDivision, setCurrentLeagueDivision] = useState<PlayerLeagueDivision | null>(null)
+  const [isLoadingCurrentLeagueDivision, setIsLoadingCurrentLeagueDivision] = useState(false)
+  const [currentLeagueDivisionError, setCurrentLeagueDivisionError] = useState<string | null>(null)
   const [isAnalyzingPlayer, setIsAnalyzingPlayer] = useState(false)
   const [isLoadingLeague, setIsLoadingLeague] = useState(false)
   const [playerLoadingStage, setPlayerLoadingStage] = useState<'profile' | 'history' | null>(null)
@@ -59,6 +69,9 @@ export function usePlayerWorkspace({
     setIsLoadingPlayerDpfRankings(false)
     setPlayerDpfRankingError(null)
     setPlayerLeagueAnalysis(null)
+    setCurrentLeagueDivision(null)
+    setIsLoadingCurrentLeagueDivision(false)
+    setCurrentLeagueDivisionError(null)
     setIsLoadingLeague(false)
     onReferenceChange(normalizedReference)
     onLocationChange({ mode: 'player', player: normalizedReference })
@@ -72,6 +85,7 @@ export function usePlayerWorkspace({
       setPlayerAnalysis({ playerId: profile.id, playerName: profile.name, events: [] })
       setIsLoadingPlayerDpfRankings(true)
       setPlayerLeagueAnalysis({ playerId: profile.id, playerName: profile.name, seasons: [] })
+      setIsLoadingCurrentLeagueDivision(true)
       setIsLoadingLeague(true)
       setPlayerLoadingStage('history')
       void getPlayerDpfRankings(profile)
@@ -85,6 +99,18 @@ export function usePlayerWorkspace({
         })
         .finally(() => {
           if (requestId === playerRequestRef.current) setIsLoadingPlayerDpfRankings(false)
+        })
+      void getPlayerCurrentLeagueDivision(profile.id)
+        .then((division) => {
+          if (requestId === playerRequestRef.current) setCurrentLeagueDivision(division)
+        })
+        .catch(() => {
+          if (requestId === playerRequestRef.current) {
+            setCurrentLeagueDivisionError('The current Lunar League division could not be loaded.')
+          }
+        })
+        .finally(() => {
+          if (requestId === playerRequestRef.current) setIsLoadingCurrentLeagueDivision(false)
         })
 
       const [tournamentResult, leagueResult] = await Promise.allSettled([
@@ -142,6 +168,9 @@ export function usePlayerWorkspace({
     setIsLoadingPlayerDpfRankings(false)
     setPlayerDpfRankingError(null)
     setPlayerLeagueAnalysis(null)
+    setCurrentLeagueDivision(null)
+    setIsLoadingCurrentLeagueDivision(false)
+    setCurrentLeagueDivisionError(null)
     setIsAnalyzingPlayer(false)
     setIsLoadingLeague(false)
     setPlayerLoadingStage(null)
@@ -154,6 +183,7 @@ export function usePlayerWorkspace({
     setIsAnalyzingPlayer(false)
     setIsLoadingLeague(false)
     setIsLoadingPlayerDpfRankings(false)
+    setIsLoadingCurrentLeagueDivision(false)
     setPlayerLoadingStage(null)
   }
 
@@ -183,6 +213,9 @@ export function usePlayerWorkspace({
     isLoadingPlayerDpfRankings,
     playerDpfRankingError,
     playerLeagueAnalysis,
+    currentLeagueDivision,
+    isLoadingCurrentLeagueDivision,
+    currentLeagueDivisionError,
     isAnalyzingPlayer,
     isLoadingLeague,
     playerLoadingStage,

@@ -45,6 +45,9 @@ function App() {
     isLoadingPlayerDpfRankings,
     playerDpfRankingError,
     playerLeagueAnalysis,
+    currentLeagueDivision,
+    isLoadingCurrentLeagueDivision,
+    currentLeagueDivisionError,
     isAnalyzingPlayer,
     isLoadingLeague,
     playerLoadingStage,
@@ -98,6 +101,9 @@ function App() {
     isLoadingPairPreparation,
     pairPreparationError,
     pairHistory,
+    tournamentGames,
+    isLoadingTournamentGames,
+    tournamentGamesError,
     fieldPlacementSummaries,
     fieldPlacementsLoaded,
     isLoadingFieldPlacements,
@@ -293,6 +299,9 @@ function App() {
                 preparationError: pairPreparationError,
                 history: pairHistory,
                 isLoadingHistory: isLoadingPair,
+                tournamentGames,
+                isLoadingTournamentGames,
+                tournamentGamesError,
               },
             }}
             actions={{
@@ -316,6 +325,9 @@ function App() {
             dpfRankingError={playerDpfRankingError}
             isLoadingDpfRankings={isLoadingPlayerDpfRankings}
             leagueAnalysis={playerLeagueAnalysis}
+            currentLeagueDivision={currentLeagueDivision}
+            currentLeagueDivisionError={currentLeagueDivisionError}
+            isLoadingCurrentLeagueDivision={isLoadingCurrentLeagueDivision}
             leagueError={playerLeagueError}
             isLoadingLeague={isLoadingLeague}
             error={playerError}

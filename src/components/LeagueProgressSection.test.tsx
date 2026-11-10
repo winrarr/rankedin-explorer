@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { LeagueSeasonAnalysis } from '../lib/rankedin'
 import { LeagueProgressSection } from './LeagueProgressSection'
 
@@ -49,6 +49,23 @@ const season: LeagueSeasonAnalysis = {
 }
 
 describe('LeagueProgressSection', () => {
+  afterEach(() => cleanup())
+
+  it('gives long histories enough chart width for readable season slots', () => {
+    const seasons = Array.from({ length: 12 }, (_, index) => ({ ...season, id: index + 1 }))
+    render(<LeagueProgressSection seasons={seasons} isLoading={false} error={null} />)
+
+    expect(screen.getByRole('img', { name: 'Lunar League division and team standing progression' }).getAttribute('width')).toBe('1052')
+    expect(screen.getByLabelText('Lunar League progression chart. Scroll horizontally to see all seasons.').getAttribute('tabindex')).toBe('0')
+    expect(screen.getByText('Scroll horizontally to see all seasons.')).toBeTruthy()
+  })
+
+  it('keeps chart slots distinct when a player has multiple teams in one league season', () => {
+    render(<LeagueProgressSection seasons={[season, { ...season, teamId: 21, teamName: 'Another team' }]} isLoading={false} error={null} />)
+
+    expect(document.querySelectorAll('.league-season-axis-label')).toHaveLength(2)
+  })
+
   it('opens player links from an individual league match', () => {
     render(<LeagueProgressSection seasons={[season]} isLoading={false} error={null} />)
 

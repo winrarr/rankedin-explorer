@@ -30,7 +30,7 @@ const input: TournamentExportInput = {
     playerCount: 2,
   }],
   fieldLeagueSummary: {
-    divisions: [{ divisionName: 'Serie 1', playerCount: 1 }],
+    divisions: [{ divisionName: 'Serie 1', playerCount: 1, players: [] }],
     missingCount: 1,
   },
   fieldPlacementSummaries: {

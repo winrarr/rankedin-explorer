@@ -51,10 +51,10 @@ The Rankedin client is divided by responsibility: `request.ts` owns the bounded 
 2. Load the tournament header and standings metadata.
 3. Load participants for the selected class.
 4. Load each field player's current DPF ranking points alongside recent placement and Lunar League summaries.
-5. When a pair is selected, page through each player's participated events and keep finished events; the pair card also reads the profile's current-year and career doubles records.
+5. When a pair is selected, load that pair's games from the selected tournament class and page through each player's participated events; the pair card also reads the profile's current-year and career doubles records.
 6. For each event, locate the player's result by numeric participant ID across classes.
-7. For the field summary, select each player's newest `Type === 3` Lunar League event and resolve only its division name; older seasons and placement are excluded.
-8. Load matches for the matching class and normalize partners, opponents, scores and outcomes.
+7. For the field summary, select each player's newest `Type === 3` Lunar League event and resolve its division name; group known player identities under that division while excluding older seasons and placement.
+8. Load matches for the matching class and normalize partner IDs, opponents, scores and outcomes so pair games can be matched safely by numeric player ID.
 9. When the user marks a selected pair as “us”, inspect up to five recent finished events from the first player's history, retain numeric opponent IDs, intersect them with the current class roster, deduplicate by match ID and show a compact preparation context.
 10. In each player history, summarize partner frequency from the visible event results and opponent frequency only from match details the user has loaded. Do not fetch extra match histories for this summary.
 
@@ -62,10 +62,10 @@ The Rankedin client is divided by responsibility: `request.ts` owns the bounded 
 
 1. Parse a public player profile URL or `R...` ID.
 2. Resolve the public ID to the API's numeric player ID and profile metadata.
-3. Load the current official DPF ranking points alongside one bounded participated-event window, then split the events into finished tournament events and finished Lunar League seasons.
+3. Load the current official DPF ranking points and current Lunar League division alongside one bounded participated-event window, then split the events into finished tournament events and finished Lunar League seasons.
 4. Analyze tournament placements and league seasons in parallel. For tournaments, locate the player's result by numeric participant ID across event classes, then match the partner's numeric ID against the class roster to provide a safe Explorer link.
 5. For Lunar League, resolve the player's team directly, then load pool standing, team fixtures and individual doubles in parallel within the shared request queue. Player Progress keeps individual doubles in each fixture's expandable detail and uses the public player URLs on match sides to link known partners and opponents.
-6. For the combined league chart, load the pool fixture list, the league ordering rules and one aggregate standing response per completed fixture. Reconstruct the selected team's rank after each of its own fixtures using all pool fixtures completed by that point, while keeping fixture result, score and opponent on the checkpoint. Show only divisions the player has entered, use the player's first-to-last fixture as each season slot, and compress gaps between chronological slots while preserving fixture order within each slot.
+6. For the combined league chart, load the pool fixture list, the league ordering rules and one aggregate standing response per completed fixture. Reconstruct the selected team's rank after each of its own fixtures using all pool fixtures completed by that point, while keeping fixture result, score and opponent on the checkpoint. Show only divisions the player has entered, use the player's first-to-last fixture as each season slot, and compress gaps between chronological slots while preserving fixture order within each slot. Measure the available chart width and allow horizontal scrolling when season slots need more room.
 7. Normalize organizer-entered tournament class labels for chart series while retaining raw labels in the result table; keep league division names categorical and preserve region/pool suffixes as metadata.
 8. Derive normalized relative finish from standing and field size, using the midpoint for ranged standings; first is 100% and last is 0%.
 

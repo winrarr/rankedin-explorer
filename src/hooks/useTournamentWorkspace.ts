@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   getClassParticipants,
+  getEventMatches,
   getPlayerAnalysis,
   getTournamentSnapshot,
   getRecentPlayerMatches,
 } from '../lib/rankedin'
 import type {
   PairRecord,
+  MatchRecord,
   TournamentSnapshot,
 } from '../lib/rankedin'
 import { summarizeFieldOpponents } from '../lib/opponentContext'
@@ -39,6 +41,9 @@ export function useTournamentWorkspace({
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isLoadingClass, setIsLoadingClass] = useState(false)
   const [isLoadingPair, setIsLoadingPair] = useState(false)
+  const [tournamentGames, setTournamentGames] = useState<MatchRecord[] | null>(null)
+  const [isLoadingTournamentGames, setIsLoadingTournamentGames] = useState(false)
+  const [tournamentGamesError, setTournamentGamesError] = useState<string | null>(null)
   const [selectedPairId, setSelectedPairId] = useState<string | null>(null)
   const [usPairId, setUsPairId] = useState<string | null>(null)
   const [pairPreparation, setPairPreparation] = useState<PairPreparationState | null>(null)
@@ -47,6 +52,7 @@ export function useTournamentWorkspace({
   const [pairHistory, setPairHistory] = useState<PairHistoryState | null>(null)
 
   const tournamentRequestRef = useRef(0)
+  const pairHistoryRequestRef = useRef(0)
   const pairPreparationRequestRef = useRef(0)
   const lastAnalyzedReferenceRef = useRef('')
   const fieldData = useTournamentFieldData({ participants: snapshot?.participants ?? null, isActive })
@@ -58,6 +64,16 @@ export function useTournamentWorkspace({
     setPairPreparation(null)
     setIsLoadingPairPreparation(false)
     setPairPreparationError(null)
+  }
+
+  function clearPairInspection() {
+    pairHistoryRequestRef.current += 1
+    setSelectedPairId(null)
+    setPairHistory(null)
+    setIsLoadingPair(false)
+    setTournamentGames(null)
+    setIsLoadingTournamentGames(false)
+    setTournamentGamesError(null)
   }
 
   async function analyzeTournament(referenceValue = reference, selectedClassId?: number) {
@@ -72,8 +88,7 @@ export function useTournamentWorkspace({
     setIsLoadingClass(false)
     setError(null)
     onShareCopied(false)
-    setSelectedPairId(null)
-    setPairHistory(null)
+    clearPairInspection()
     clearPairPreparation()
     onReferenceChange(normalizedReference)
     onLocationChange({ mode: 'tournament', tournament: normalizedReference, classId: selectedClassId })
@@ -107,8 +122,7 @@ export function useTournamentWorkspace({
       const participants = await getClassParticipants(snapshot.tournamentId, classId)
       if (requestId !== tournamentRequestRef.current) return
       setSnapshot((current) => current ? ({ ...current, selectedClass: nextClass, participants }) : current)
-      setSelectedPairId(null)
-      setPairHistory(null)
+      clearPairInspection()
       clearPairPreparation()
       resetFieldData()
       onLocationChange({ mode: 'tournament', tournament: reference, classId: nextClass.id })
@@ -121,20 +135,45 @@ export function useTournamentWorkspace({
   }
 
   async function inspectPair(pair: PairRecord): Promise<PairHistoryState> {
+    const requestId = pairHistoryRequestRef.current + 1
+    pairHistoryRequestRef.current = requestId
     setSelectedPairId(pair.id)
     setPairHistory(null)
+    setTournamentGames(null)
+    setTournamentGamesError(null)
+    setIsLoadingTournamentGames(true)
     if (pair.id !== usPairId) {
       setPairPreparation(null)
       setPairPreparationError(null)
     }
     setIsLoadingPair(true)
 
-    const results = await Promise.allSettled([
+    const historyPromise = Promise.allSettled([
       getPlayerAnalysis(pair.first.id, historyLimit),
       getPlayerAnalysis(pair.second.id, historyLimit),
     ])
+    const gamesPromise = snapshot
+      ? getEventMatches(snapshot.tournamentId, snapshot.selectedClass.id, pair.first.id)
+      : Promise.resolve([] as MatchRecord[])
 
-    const [firstResult, secondResult] = results
+    void gamesPromise
+      .then((games) => {
+        if (requestId === pairHistoryRequestRef.current) {
+          setTournamentGames(games.filter((match) => match.partnerId === pair.second.id))
+        }
+      })
+      .catch((caught: unknown) => {
+        if (requestId === pairHistoryRequestRef.current) {
+          setTournamentGamesError(caught instanceof Error
+            ? caught.message
+            : 'Games for this pair could not be loaded.')
+        }
+      })
+      .finally(() => {
+        if (requestId === pairHistoryRequestRef.current) setIsLoadingTournamentGames(false)
+      })
+
+    const [firstResult, secondResult] = await historyPromise
     const nextPairHistory: PairHistoryState = {
       first: firstResult.status === 'fulfilled'
         ? { analysis: { ...firstResult.value, playerName: pair.first.name }, error: null }
@@ -143,8 +182,10 @@ export function useTournamentWorkspace({
         ? { analysis: { ...secondResult.value, playerName: pair.second.name }, error: null }
         : { analysis: null, error: secondResult.reason instanceof Error ? secondResult.reason.message : 'Player history could not be loaded.' },
     }
-    setPairHistory(nextPairHistory)
-    setIsLoadingPair(false)
+    if (requestId === pairHistoryRequestRef.current) {
+      setPairHistory(nextPairHistory)
+      setIsLoadingPair(false)
+    }
     return nextPairHistory
   }
 
@@ -189,8 +230,7 @@ export function useTournamentWorkspace({
   }
 
   function closePairHistory() {
-    setSelectedPairId(null)
-    setPairHistory(null)
+    clearPairInspection()
   }
 
   function reset() {
@@ -202,9 +242,7 @@ export function useTournamentWorkspace({
     setSearchTerm('')
     setIsAnalyzing(false)
     setIsLoadingClass(false)
-    setIsLoadingPair(false)
-    setSelectedPairId(null)
-    setPairHistory(null)
+    clearPairInspection()
     resetFieldData()
     clearPairPreparation()
   }
@@ -248,6 +286,9 @@ export function useTournamentWorkspace({
     isAnalyzing,
     isLoadingClass,
     isLoadingPair,
+    tournamentGames,
+    isLoadingTournamentGames,
+    tournamentGamesError,
     selectedPairId,
     usPairId,
     pairPreparation,

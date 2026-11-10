@@ -390,6 +390,7 @@ function normalizeMatch(match: RawMatch, playerId: number): MatchRecord | null {
     draw: match.Draw,
     won,
     partner: currentPlayers.find((player) => player.id !== playerId)?.name ?? '',
+    partnerId: currentPlayers.find((player) => player.id !== playerId)?.id ?? null,
     opponents: opponentPlayers.map((player) => player.name),
     opponentIds: opponentPlayers.map((player) => player.id),
     score: formatMatchScore(match),

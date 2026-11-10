@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { LeagueSeasonAnalysis, LeagueStandingSnapshot } from '../lib/rankedin'
 import { dateTimestamp, formatCompactDate, ordinalPosition } from '../lib/formatters'
 import { leagueDivisionIndex, leagueDivisionScale } from '../lib/fieldBreakdown'
@@ -42,6 +42,10 @@ function leagueResultColor(result: LeagueStandingSnapshot['result']) {
 function leagueSeasonAxisLabel(season: LeagueSeasonAnalysis) {
   const seasonLabel = season.name.match(/(?:Forår|Efterår|Spring|Autumn)\s+\d{4}/i)
   return seasonLabel?.[0] ?? formatCompactDate(season.startDate)
+}
+
+function leagueSeasonKey(season: LeagueSeasonAnalysis) {
+  return `${season.id}-${season.teamId}`
 }
 
 function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { scale: LeagueTimeScale }) {
@@ -120,7 +124,7 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
   })
 
   return (
-    <svg className="league-chart-svg" viewBox={`0 0 ${scale.chartWidth} ${chartHeight}`} role="img" aria-label="Lunar League division and team standing progression">
+    <svg className="league-chart-svg" width={scale.chartWidth} viewBox={`0 0 ${scale.chartWidth} ${chartHeight}`} role="img" aria-label="Lunar League division and team standing progression">
       <title>Lunar League division and team standing progression</title>
       {visibleDivisions.map((division, index) => {
         const top = chartTop + index * divisionHeight
@@ -134,7 +138,7 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
         )
       })}
       {seasonSlots.map((slot) => (
-        <text className="league-season-axis-label" key={slot.season.id} x={slot.x + slot.width / 2} y={chartHeight - 15} textAnchor="middle">{leagueSeasonAxisLabel(slot.season)}</text>
+        <text className="league-season-axis-label" key={leagueSeasonKey(slot.season)} x={slot.x + slot.width / 2} y={chartHeight - 15} textAnchor="middle">{leagueSeasonAxisLabel(slot.season)}</text>
       ))}
       <text className="league-axis-caption" x={scale.chartLeft} y={chartTop - 9}>HIGHER DIVISION · BETTER RANK</text>
       <line className="league-axis-line" x1={scale.chartLeft} x2={scale.chartLeft} y1={chartTop} y2={chartHeight - chartBottom} />
@@ -159,7 +163,7 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
       {seasonPaths.map(({ season, points, color, finalPoint, finalStanding, finalTeamCount, finalPositionChanged }) => {
         const linePoints = points.map((point) => `${point.x},${point.y}`).join(' ')
         return (
-          <g key={season.id}>
+          <g key={leagueSeasonKey(season)}>
             {points.length > 1 && <polyline className="league-standing-line" points={linePoints} stroke={color} />}
             {finalPoint && finalPositionChanged && <>
               <circle className="league-season-end-point" cx={finalPoint.x} cy={finalPoint.y} r="5" fill={color} />
@@ -177,7 +181,7 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
                   ? <polygon className="league-standing-marker" points={`${x},${y - 7} ${x + 7},${y} ${x},${y + 7} ${x - 7},${y}`} fill={resultColor} />
                   : <circle className="league-standing-marker" cx={x} cy={y} r="7" fill={resultColor} />
               return (
-                <g key={`${season.id}-${point.fixtureId}`}>
+                <g key={`${leagueSeasonKey(season)}-${point.fixtureId}`}>
                   {marker}
                   <text className="league-standing-marker-label" x={x} y={y + 3} textAnchor="middle">{leagueResultLabel(point.result)}</text>
                   {positionChanged && <text className="league-standing-rank-label" x={x} y={y - 11} textAnchor="middle">{point.standing} / {point.teamCount}</text>}
@@ -193,22 +197,36 @@ function LeagueCombinedChart({ seasons, scale }: LeagueProgressChartProps & { sc
 }
 
 export function LeagueProgressChart({ seasons }: LeagueProgressChartProps) {
-  const [isCompact, setIsCompact] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 620)
-  const chartWidth = isCompact ? 390 : 930
+  const chartWrapRef = useRef<HTMLDivElement>(null)
+  const [availableWidth, setAvailableWidth] = useState(930)
+  const minimumSeasonWidth = 64
+  const seasonGap = 16
+  const minimumChartWidth = 108
+    + seasons.length * minimumSeasonWidth
+    + Math.max(seasons.length - 1, 0) * seasonGap
+  const chartWidth = Math.max(availableWidth, minimumChartWidth)
   const scale = leagueTimeScale(chartWidth)
 
   useEffect(() => {
-    function updateChartWidth() {
-      setIsCompact(window.innerWidth <= 620)
-    }
+    const element = chartWrapRef.current
+    if (!element || typeof ResizeObserver === 'undefined') return
 
-    window.addEventListener('resize', updateChartWidth)
-    return () => window.removeEventListener('resize', updateChartWidth)
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setAvailableWidth(Math.floor(entry.contentRect.width))
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
   }, [])
 
   return (
-    <div className="league-chart-wrap">
+    <div
+      className="league-chart-wrap"
+      ref={chartWrapRef}
+      tabIndex={chartWidth > availableWidth + 1 ? 0 : undefined}
+      aria-label="Lunar League progression chart. Scroll horizontally to see all seasons."
+    >
       <LeagueCombinedChart seasons={seasons} scale={scale} />
+      {chartWidth > availableWidth + 1 && <p className="league-chart-scroll-note">Scroll horizontally to see all seasons.</p>}
       <div className="league-chart-legend">
         <span><i className="league-result-marker league-result-marker-win">W</i> Win</span>
         <span><i className="league-result-marker league-result-marker-loss">L</i> Loss</span>

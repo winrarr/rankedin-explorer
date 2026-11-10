@@ -4,7 +4,9 @@ import { PairPreparationPanel } from './PairPreparationPanel'
 import { PairUsButton } from './PairUsButton'
 import { PlayerHistoryColumn } from './PlayerHistoryColumn'
 import { ExplorerPlayerLink } from './ExplorerPlayerLink'
+import { InfoTip } from './InfoTip'
 import type { TournamentWorkspacePairState } from './tournamentTypes'
+import { formatCompactDate } from '../lib/formatters'
 
 type TournamentPairHistoryProps = {
   selectedPair: PairRecord | undefined
@@ -49,6 +51,36 @@ export function TournamentPairHistory({
           <button className="icon-button quiet" type="button" onClick={onClose} aria-label="Close pair history"><X size={17} /></button>
         </div>
       </div>
+
+      <section className="pair-tournament-games" aria-label="Selected tournament games">
+        <div className="pair-tournament-games-heading">
+          <div>
+            <div className="section-kicker">SELECTED TOURNAMENT GAMES</div>
+            <p>Games for this pair in the tournament class <InfoTip label="About selected tournament games" message="Only games played by both selected players together are listed. Rankedin may not publish match details for every class." /></p>
+          </div>
+          <span aria-live="polite">{state.isLoadingTournamentGames ? 'Loading…' : state.tournamentGames ? `${state.tournamentGames.length} games` : '—'}</span>
+        </div>
+        {state.tournamentGamesError && <p className="pair-tournament-games-empty" role="alert">{state.tournamentGamesError}</p>}
+        {!state.isLoadingTournamentGames && !state.tournamentGamesError && state.tournamentGames?.length === 0 && (
+          <p className="pair-tournament-games-empty">No published games were found for this pair in the selected class.</p>
+        )}
+        {!!state.tournamentGames?.length && (
+          <div className="pair-tournament-games-list">
+            {state.tournamentGames.map((match) => (
+              <div className="pair-tournament-game" key={match.id}>
+                <span className={`match-result ${match.won === true ? 'win' : match.won === false ? 'loss' : ''}`}>
+                  {match.won === true ? 'W' : match.won === false ? 'L' : '—'}
+                </span>
+                <div>
+                  <strong>{match.opponents.length ? `vs ${match.opponents.join(' + ')}` : 'Opponent unavailable'}</strong>
+                  <span>{match.draw || match.className} · {formatCompactDate(match.date)}</span>
+                </div>
+                <span className="pair-tournament-game-score">{match.score}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <div className="pair-history-grid">
         <PlayerHistoryColumn

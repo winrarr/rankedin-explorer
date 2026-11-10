@@ -1,5 +1,6 @@
 import type {
   DpfPlayerRanking,
+  MatchRecord,
   PairRecord,
   PlayerAnalysis,
   PlayerLeagueDivision,
@@ -46,6 +47,9 @@ export type TournamentWorkspacePairState = {
   preparationError: string | null
   history: PairHistoryState | null
   isLoadingHistory: boolean
+  tournamentGames: MatchRecord[] | null
+  isLoadingTournamentGames: boolean
+  tournamentGamesError: string | null
 }
 
 export type TournamentWorkspaceState = {

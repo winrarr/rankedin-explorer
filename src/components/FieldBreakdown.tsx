@@ -1,5 +1,6 @@
 import { Info } from 'lucide-react'
 import type { FieldClassSummary, FieldLeagueDivisionCount } from '../lib/fieldBreakdown'
+import { ExplorerPlayerLink } from './ExplorerPlayerLink'
 
 export function FieldClassSummaryGrid({ summaries }: { summaries: FieldClassSummary[] }) {
   return (
@@ -44,6 +45,18 @@ export function FieldLeagueDivisionSummary({
               <div className="league-field-bar" aria-hidden="true">
                 <span style={{ width: `${(division.playerCount / Math.max(totalPlayers, 1)) * 100}%` }} />
               </div>
+              {!!division.players.length && (
+                <details className="league-field-members">
+                  <summary>Show players</summary>
+                  <div className="league-field-player-list">
+                    {division.players.map((player) => (
+                      <ExplorerPlayerLink key={player.rankedInId} rankedInId={player.rankedInId} name={player.name}>
+                        {player.name}
+                      </ExplorerPlayerLink>
+                    ))}
+                  </div>
+                </details>
+              )}
             </div>
           ))}
         </div>

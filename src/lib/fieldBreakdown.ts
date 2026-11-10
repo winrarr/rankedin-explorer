@@ -1,4 +1,9 @@
-import { normalizeCompetitionClassName, type PlayerAnalysis, type PlayerLeagueDivision } from './rankedin'
+import {
+  normalizeCompetitionClassName,
+  type PlayerAnalysis,
+  type PlayerLeagueDivision,
+  type PlayerRecord,
+} from './rankedin'
 import { relativeFinishPercent } from './placement'
 
 export type FieldClassSummary = {
@@ -12,6 +17,7 @@ export type FieldClassSummary = {
 export type FieldLeagueDivisionCount = {
   divisionName: string
   playerCount: number
+  players: Pick<PlayerRecord, 'name' | 'rankedInId'>[]
 }
 
 export function summarizeFieldPlacements(analyses: Record<number, PlayerAnalysis | null>) {
@@ -99,21 +105,32 @@ export function leagueDivisionIndex(value: string) {
   return Math.min(leagueDivisionScale.length - 1, leagueDivisionRank(value))
 }
 
-export function summarizeFieldLeagueDivisions(divisions: Record<number, PlayerLeagueDivision | null>) {
-  const groups = new Map<string, number>()
+export function summarizeFieldLeagueDivisions(
+  divisions: Record<number, PlayerLeagueDivision | null>,
+  players: Pick<PlayerRecord, 'id' | 'name' | 'rankedInId'>[] = [],
+) {
+  const playerById = new Map(players.map((player) => [player.id, player]))
+  const groups = new Map<string, FieldLeagueDivisionCount>()
   let missingCount = 0
 
-  Object.values(divisions).forEach((division) => {
+  Object.entries(divisions).forEach(([id, division]) => {
     const divisionName = division?.divisionName.trim()
     if (!divisionName) {
       missingCount += 1
       return
     }
-    groups.set(divisionName, (groups.get(divisionName) ?? 0) + 1)
+    const group = groups.get(divisionName) ?? { divisionName, playerCount: 0, players: [] }
+    group.playerCount += 1
+    const player = playerById.get(Number(id))
+    if (player) group.players.push({ name: player.name, rankedInId: player.rankedInId })
+    groups.set(divisionName, group)
   })
 
   return {
-    divisions: Array.from(groups, ([divisionName, playerCount]): FieldLeagueDivisionCount => ({ divisionName, playerCount }))
+    divisions: Array.from(groups.values(), (group) => ({
+      ...group,
+      players: group.players.sort((first, second) => first.name.localeCompare(second.name)),
+    }))
       .sort((first, second) => leagueDivisionRank(first.divisionName) - leagueDivisionRank(second.divisionName)
         || second.playerCount - first.playerCount
         || first.divisionName.localeCompare(second.divisionName)),
