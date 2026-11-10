@@ -1,4 +1,10 @@
-import { query, request, type RequestPriority } from './request'
+import {
+  query,
+  request,
+  waitForInteractiveMatchBatch,
+  withInteractiveMatchBatch,
+  type RequestPriority,
+} from './request'
 import { mapWithConcurrency } from './shared'
 import { getClassParticipants } from './tournaments'
 import type {
@@ -397,17 +403,20 @@ function normalizeMatch(match: RawMatch, playerId: number): MatchRecord | null {
   }
 }
 
-export async function getEventMatches(
+async function loadEventMatches(
   tournamentId: number,
   classId: number,
   playerId: number,
-  priority: RequestPriority = 'normal',
+  priority: RequestPriority,
 ) {
+  if (priority === 'normal') await waitForInteractiveMatchBatch()
   const draws = await request<RawClassDraw[]>(
     `/tournament/GetClassesAndDrawNamesAsync${query({ tournamentId })}`,
     undefined,
     priority,
+    true,
   )
+  if (priority === 'normal') await waitForInteractiveMatchBatch()
   const classDraw = draws.find((item) => item.Id === classId)
   const drawRequests = classDraw?.TournamentDraws ?? []
 
@@ -425,6 +434,7 @@ export async function getEventMatches(
             })}`,
             undefined,
             priority,
+            true,
           ),
         ),
       )
@@ -437,6 +447,7 @@ export async function getEventMatches(
           })}`,
           undefined,
           priority,
+          true,
         ),
       ]
 
@@ -444,6 +455,18 @@ export async function getEventMatches(
     const normalized = normalizeMatch(match, playerId)
     return normalized ? [normalized] : []
   })
+}
+
+export function getEventMatches(
+  tournamentId: number,
+  classId: number,
+  playerId: number,
+  priority: RequestPriority = 'normal',
+) {
+  if (priority === 'interactive') {
+    return withInteractiveMatchBatch(() => loadEventMatches(tournamentId, classId, playerId, priority))
+  }
+  return loadEventMatches(tournamentId, classId, playerId, priority)
 }
 
 export async function getRecentPlayerMatches(analysis: PlayerAnalysis, maxEvents = 5): Promise<RecentPlayerMatches> {

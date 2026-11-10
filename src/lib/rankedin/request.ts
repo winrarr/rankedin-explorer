@@ -3,6 +3,7 @@ const responseCache = new Map<string, Promise<unknown>>()
 
 type QueuedRequest = {
   cancelled: boolean
+  matchLoad: boolean
   priority: RequestPriority
   run: () => void
 }
@@ -12,10 +13,11 @@ export type RequestPriority = 'normal' | 'interactive'
 const requestQueue: QueuedRequest[] = []
 const queuedCacheableRequests = new Map<string, QueuedRequest>()
 const MAX_ACTIVE_REQUESTS = 25
-const MAX_BACKGROUND_REQUESTS = MAX_ACTIVE_REQUESTS - 2
 const MAX_RETRY_ATTEMPTS = 4
 let activeRequestCount = 0
-let activeBackgroundRequestCount = 0
+let activeInteractiveMatchBatchCount = 0
+let interactiveMatchBatchTail: Promise<void> = Promise.resolve()
+const interactiveMatchBatchWaiters: Array<() => void> = []
 let requestNotBefore = 0
 let requestDrainTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -35,17 +37,41 @@ function drainRequestQueue() {
   }
 
   while (activeRequestCount < MAX_ACTIVE_REQUESTS && requestQueue.length) {
-    const nextRequest = requestQueue[0]
+    const nextRequestIndex = requestQueue.findIndex((queued) => (
+      queued.cancelled
+      || !activeInteractiveMatchBatchCount
+      || !queued.matchLoad
+      || queued.priority === 'interactive'
+    ))
+    if (nextRequestIndex === -1) return
+    const [nextRequest] = requestQueue.splice(nextRequestIndex, 1)
     if (!nextRequest) return
-    if (nextRequest.cancelled) {
-      requestQueue.shift()
-      continue
-    }
-    if (nextRequest.priority === 'normal' && activeBackgroundRequestCount >= MAX_BACKGROUND_REQUESTS) return
-    requestQueue.shift()
+    if (nextRequest.cancelled) continue
     activeRequestCount += 1
-    if (nextRequest.priority === 'normal') activeBackgroundRequestCount += 1
     nextRequest.run()
+  }
+}
+
+export async function waitForInteractiveMatchBatch() {
+  while (activeInteractiveMatchBatchCount > 0) {
+    await new Promise<void>((resolve) => interactiveMatchBatchWaiters.push(resolve))
+  }
+}
+
+export async function withInteractiveMatchBatch<T>(loadMatches: () => Promise<T>): Promise<T> {
+  activeInteractiveMatchBatchCount += 1
+  const pending = interactiveMatchBatchTail.then(loadMatches)
+  interactiveMatchBatchTail = pending.then(() => undefined, () => undefined)
+  drainRequestQueue()
+
+  try {
+    return await pending
+  } finally {
+    activeInteractiveMatchBatchCount -= 1
+    if (activeInteractiveMatchBatchCount === 0) {
+      interactiveMatchBatchWaiters.splice(0).forEach((resolve) => resolve())
+      drainRequestQueue()
+    }
   }
 }
 
@@ -131,16 +157,17 @@ function enqueueRequest<T>(
   task: () => Promise<T>,
   signal: AbortSignal | undefined,
   priority: RequestPriority,
+  matchLoad: boolean,
   cacheable: boolean,
 ) {
   return new Promise<T>((resolve, reject) => {
     let started = false
     const queuedRequest: QueuedRequest = {
       cancelled: false,
+      matchLoad,
       priority,
       run: async () => {
         started = true
-        const isBackgroundRequest = queuedRequest.priority === 'normal'
         signal?.removeEventListener('abort', cancel)
         if (queuedCacheableRequests.get(path) === queuedRequest) queuedCacheableRequests.delete(path)
         try {
@@ -150,7 +177,6 @@ function enqueueRequest<T>(
           reject(error)
         } finally {
           activeRequestCount -= 1
-          if (isBackgroundRequest) activeBackgroundRequestCount -= 1
           drainRequestQueue()
         }
       },
@@ -176,7 +202,12 @@ function enqueueRequest<T>(
   })
 }
 
-export async function request<T>(path: string, signal?: AbortSignal, priority: RequestPriority = 'normal'): Promise<T> {
+export async function request<T>(
+  path: string,
+  signal?: AbortSignal,
+  priority: RequestPriority = 'normal',
+  matchLoad = false,
+): Promise<T> {
   const cacheable = !signal
   const cached = cacheable ? responseCache.get(path) : undefined
   if (cached) {
@@ -191,7 +222,7 @@ export async function request<T>(path: string, signal?: AbortSignal, priority: R
     return cached as Promise<T>
   }
 
-  const pending = enqueueRequest(path, () => fetchJson(path, signal), signal, priority, cacheable)
+  const pending = enqueueRequest(path, () => fetchJson(path, signal), signal, priority, matchLoad, cacheable)
   if (cacheable) responseCache.set(path, pending)
 
   try {

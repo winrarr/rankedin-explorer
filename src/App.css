@@ -1648,6 +1648,7 @@ h1 em {
 }
 .league-progress-card {
   margin-top: 14px;
+  padding-bottom: 15px;
   overflow: hidden;
 }
 .league-chart-wrap {

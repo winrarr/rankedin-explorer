@@ -78,6 +78,75 @@ describe('Rankedin request lifecycle', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
+  it('holds other match loads until an interactive match batch finishes', async () => {
+    const startedPaths: string[] = []
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      startedPaths.push(url)
+      return Promise.resolve(jsonResponse({ url }))
+    }))
+    const { request, withInteractiveMatchBatch } = await import('./request')
+    let queuedMatch: Promise<{ url: string }> | undefined
+
+    await withInteractiveMatchBatch(async () => {
+      await request('/interactive-match-one', undefined, 'interactive', true)
+      queuedMatch = request('/queued-match', undefined, 'normal', true)
+      await request('/unrelated-lookup')
+      await request('/interactive-match-two', undefined, 'interactive', true)
+
+      expect(startedPaths).toEqual([
+        'https://api.rankedin.com/v1/interactive-match-one',
+        'https://api.rankedin.com/v1/unrelated-lookup',
+        'https://api.rankedin.com/v1/interactive-match-two',
+      ])
+    })
+
+    await expect(queuedMatch).resolves.toEqual({ url: 'https://api.rankedin.com/v1/queued-match' })
+    expect(startedPaths.at(-1)).toBe('https://api.rankedin.com/v1/queued-match')
+  })
+
+  it('finishes interactive pair batches one at a time before resuming queued matches', async () => {
+    const startedPaths: string[] = []
+    let releaseFirstRequest: (() => void) | undefined
+    let notifyFirstRequestStarted: (() => void) | undefined
+    const firstRequestStarted = new Promise<void>((resolve) => {
+      notifyFirstRequestStarted = resolve
+    })
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      startedPaths.push(url)
+      if (url.endsWith('/interactive-pair-one')) {
+        notifyFirstRequestStarted?.()
+        return new Promise<Response>((resolve) => {
+          releaseFirstRequest = () => resolve(jsonResponse({ url }))
+        })
+      }
+      return Promise.resolve(jsonResponse({ url }))
+    }))
+    const { request, withInteractiveMatchBatch } = await import('./request')
+    let secondPairStarted = false
+    const firstPair = withInteractiveMatchBatch(() => request('/interactive-pair-one', undefined, 'interactive', true))
+    await firstRequestStarted
+    const secondPair = withInteractiveMatchBatch(async () => {
+      secondPairStarted = true
+      return request('/interactive-pair-two', undefined, 'interactive', true)
+    })
+    const queuedMatch = request('/queued-match', undefined, 'normal', true)
+
+    expect(secondPairStarted).toBe(false)
+    expect(startedPaths).toEqual(['https://api.rankedin.com/v1/interactive-pair-one'])
+
+    releaseFirstRequest?.()
+    await expect(firstPair).resolves.toEqual({ url: 'https://api.rankedin.com/v1/interactive-pair-one' })
+    await expect(secondPair).resolves.toEqual({ url: 'https://api.rankedin.com/v1/interactive-pair-two' })
+    await expect(queuedMatch).resolves.toEqual({ url: 'https://api.rankedin.com/v1/queued-match' })
+    expect(startedPaths).toEqual([
+      'https://api.rankedin.com/v1/interactive-pair-one',
+      'https://api.rankedin.com/v1/interactive-pair-two',
+      'https://api.rankedin.com/v1/queued-match',
+    ])
+  })
+
   it('deduplicates concurrent requests and caches successful responses', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ value: 42 }))
     vi.stubGlobal('fetch', fetchMock)
