@@ -153,7 +153,7 @@ export function useTournamentWorkspace({
       getPlayerAnalysis(pair.second.id, historyLimit),
     ])
     const gamesPromise = snapshot
-      ? getEventMatches(snapshot.tournamentId, snapshot.selectedClass.id, pair.first.id)
+      ? getEventMatches(snapshot.tournamentId, snapshot.selectedClass.id, pair.first.id, 'interactive')
       : Promise.resolve([] as MatchRecord[])
 
     void gamesPromise

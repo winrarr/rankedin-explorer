@@ -1,4 +1,4 @@
-import { query, request } from './request'
+import { query, request, type RequestPriority } from './request'
 import { mapWithConcurrency } from './shared'
 import { getClassParticipants } from './tournaments'
 import type {
@@ -397,9 +397,16 @@ function normalizeMatch(match: RawMatch, playerId: number): MatchRecord | null {
   }
 }
 
-export async function getEventMatches(tournamentId: number, classId: number, playerId: number) {
+export async function getEventMatches(
+  tournamentId: number,
+  classId: number,
+  playerId: number,
+  priority: RequestPriority = 'normal',
+) {
   const draws = await request<RawClassDraw[]>(
     `/tournament/GetClassesAndDrawNamesAsync${query({ tournamentId })}`,
+    undefined,
+    priority,
   )
   const classDraw = draws.find((item) => item.Id === classId)
   const drawRequests = classDraw?.TournamentDraws ?? []
@@ -416,6 +423,8 @@ export async function getEventMatches(tournamentId: number, classId: number, pla
               DrawStrength: draw.Strength,
               DrawStage: draw.Stage,
             })}`,
+            undefined,
+            priority,
           ),
         ),
       )
@@ -426,6 +435,8 @@ export async function getEventMatches(tournamentId: number, classId: number, pla
             LanguageCode: 'en',
             IsReadonly: true,
           })}`,
+          undefined,
+          priority,
         ),
       ]
 

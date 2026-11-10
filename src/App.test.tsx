@@ -177,7 +177,7 @@ describe('tournament class changes', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Load Tournament 100 player and Tournament 100 player Partner games' }))
 
     await screen.findByText('vs Opponent One + Opponent Two')
-    expect(api.getEventMatches).toHaveBeenCalledWith(100, 1001, 10000)
+    expect(api.getEventMatches).toHaveBeenCalledWith(100, 1001, 10000, 'interactive')
     expect(screen.getByText('6-4 6-3')).toBeTruthy()
     expect(screen.queryByText('vs Opponent Three + Opponent Four')).toBeNull()
   })

@@ -51,13 +51,14 @@ const season: LeagueSeasonAnalysis = {
 describe('LeagueProgressSection', () => {
   afterEach(() => cleanup())
 
-  it('gives long histories enough chart width for readable season slots', () => {
+  it('fits long histories without adding a horizontal scrollbar', () => {
     const seasons = Array.from({ length: 12 }, (_, index) => ({ ...season, id: index + 1 }))
     render(<LeagueProgressSection seasons={seasons} isLoading={false} error={null} />)
 
-    expect(screen.getByRole('img', { name: 'Lunar League division and team standing progression' }).getAttribute('width')).toBe('1052')
-    expect(screen.getByLabelText('Lunar League progression chart. Scroll horizontally to see all seasons.').getAttribute('tabindex')).toBe('0')
-    expect(screen.getByText('Scroll horizontally to see all seasons.')).toBeTruthy()
+    const chart = screen.getByRole('img', { name: 'Lunar League division and team standing progression' })
+    expect(Number(chart.getAttribute('width'))).toBe(220)
+    expect(screen.getByLabelText('Lunar League progression chart').getAttribute('tabindex')).toBeNull()
+    expect(screen.queryByText('Scroll horizontally to see all seasons.')).toBeNull()
   })
 
   it('keeps chart slots distinct when a player has multiple teams in one league season', () => {

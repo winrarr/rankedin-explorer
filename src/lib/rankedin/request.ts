@@ -3,13 +3,19 @@ const responseCache = new Map<string, Promise<unknown>>()
 
 type QueuedRequest = {
   cancelled: boolean
+  priority: RequestPriority
   run: () => void
 }
 
+export type RequestPriority = 'normal' | 'interactive'
+
 const requestQueue: QueuedRequest[] = []
+const queuedCacheableRequests = new Map<string, QueuedRequest>()
 const MAX_ACTIVE_REQUESTS = 25
+const MAX_BACKGROUND_REQUESTS = MAX_ACTIVE_REQUESTS - 2
 const MAX_RETRY_ATTEMPTS = 4
 let activeRequestCount = 0
+let activeBackgroundRequestCount = 0
 let requestNotBefore = 0
 let requestDrainTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -29,10 +35,16 @@ function drainRequestQueue() {
   }
 
   while (activeRequestCount < MAX_ACTIVE_REQUESTS && requestQueue.length) {
-    const nextRequest = requestQueue.shift()
+    const nextRequest = requestQueue[0]
     if (!nextRequest) return
-    if (nextRequest.cancelled) continue
+    if (nextRequest.cancelled) {
+      requestQueue.shift()
+      continue
+    }
+    if (nextRequest.priority === 'normal' && activeBackgroundRequestCount >= MAX_BACKGROUND_REQUESTS) return
+    requestQueue.shift()
     activeRequestCount += 1
+    if (nextRequest.priority === 'normal') activeBackgroundRequestCount += 1
     nextRequest.run()
   }
 }
@@ -114,14 +126,23 @@ async function fetchJson(path: string, signal?: AbortSignal) {
   throw new Error(`Rankedin request failed for ${path}`)
 }
 
-function enqueueRequest<T>(task: () => Promise<T>, signal?: AbortSignal) {
+function enqueueRequest<T>(
+  path: string,
+  task: () => Promise<T>,
+  signal: AbortSignal | undefined,
+  priority: RequestPriority,
+  cacheable: boolean,
+) {
   return new Promise<T>((resolve, reject) => {
     let started = false
     const queuedRequest: QueuedRequest = {
       cancelled: false,
+      priority,
       run: async () => {
         started = true
+        const isBackgroundRequest = queuedRequest.priority === 'normal'
         signal?.removeEventListener('abort', cancel)
+        if (queuedCacheableRequests.get(path) === queuedRequest) queuedCacheableRequests.delete(path)
         try {
           if (signal?.aborted) throw abortError()
           resolve(await task())
@@ -129,6 +150,7 @@ function enqueueRequest<T>(task: () => Promise<T>, signal?: AbortSignal) {
           reject(error)
         } finally {
           activeRequestCount -= 1
+          if (isBackgroundRequest) activeBackgroundRequestCount -= 1
           drainRequestQueue()
         }
       },
@@ -136,6 +158,7 @@ function enqueueRequest<T>(task: () => Promise<T>, signal?: AbortSignal) {
     function cancel() {
       if (started) return
       queuedRequest.cancelled = true
+      if (queuedCacheableRequests.get(path) === queuedRequest) queuedCacheableRequests.delete(path)
       reject(abortError())
       drainRequestQueue()
     }
@@ -145,17 +168,30 @@ function enqueueRequest<T>(task: () => Promise<T>, signal?: AbortSignal) {
       return
     }
     signal?.addEventListener('abort', cancel, { once: true })
-    requestQueue.push(queuedRequest)
+    const insertionIndex = requestQueue.findIndex((queued) => priority === 'interactive' && queued.priority === 'normal')
+    if (insertionIndex === -1) requestQueue.push(queuedRequest)
+    else requestQueue.splice(insertionIndex, 0, queuedRequest)
+    if (cacheable) queuedCacheableRequests.set(path, queuedRequest)
     drainRequestQueue()
   })
 }
 
-export async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
+export async function request<T>(path: string, signal?: AbortSignal, priority: RequestPriority = 'normal'): Promise<T> {
   const cacheable = !signal
   const cached = cacheable ? responseCache.get(path) : undefined
-  if (cached) return cached as Promise<T>
+  if (cached) {
+    if (priority === 'interactive') {
+      const queuedRequest = queuedCacheableRequests.get(path)
+      if (queuedRequest && queuedRequest.priority === 'normal') {
+        queuedRequest.priority = 'interactive'
+        requestQueue.sort((first, second) => Number(second.priority === 'interactive') - Number(first.priority === 'interactive'))
+        drainRequestQueue()
+      }
+    }
+    return cached as Promise<T>
+  }
 
-  const pending = enqueueRequest(() => fetchJson(path, signal), signal)
+  const pending = enqueueRequest(path, () => fetchJson(path, signal), signal, priority, cacheable)
   if (cacheable) responseCache.set(path, pending)
 
   try {
